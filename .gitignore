@@ -222,3 +222,9 @@ __marimo__/
 # OpenBetLab data (re-downloadable / regenerated)
 data/raw/
 data/clean/
+
+# Betfair Historic Data: personal-use licence - raw files and anything derived from them
+# (prices, odds tables, odds reports) must NEVER be committed.
+data/raw/betfair/
+data/odds/
+reports/private/

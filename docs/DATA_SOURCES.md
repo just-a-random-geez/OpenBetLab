@@ -28,3 +28,18 @@
 - CC0 waives copyright and database rights (incl. EU Directive 96/9/EC); commercial use allowed; no attribution required (we credit anyway).
 - CC0 §4: no warranty of accuracy; no trademark rights granted (club names/crests are not covered).
 - Re-check licence files when bumping the pinned upstream commit.
+
+## Betfair Historic Data – BASIC tier (odds)
+
+- URL: https://historicdata.betfair.com/
+- Use: football match odds (MATCH_ODDS markets), last traded prices at 1-minute
+  intervals before and during the match.
+- Tier: BASIC (free).
+- Licence: **personal use only** (recorded 2026-11-11, as stated by the project owner;
+  check the current terms on the Betfair Historic Data site before any other use).
+- Storage rules:
+  - Raw files go in `data/raw/betfair/` and are **never committed** (gitignored).
+  - Everything derived from them (`data/odds/` tables and `data/odds/odds_report.md`,
+    `reports/private/`) is also gitignored and must not be committed or shared.
+  - A test (`tests/test_betfair.py`) fails if any of these paths become tracked.
+- Recorded: 2026-11-11

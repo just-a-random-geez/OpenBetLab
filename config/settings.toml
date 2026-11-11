@@ -1,0 +1,12 @@
+# OpenBetLab settings. Edit here; code reads them via openbetlab.settings.load_settings().
+
+[betfair]
+# Commission charged on NET winnings per market (0.05 = 5%, Betfair's standard base rate).
+# Your own rate may differ (discounts, Premium Charge). Used in every profit calculation.
+commission = 0.05
+
+[odds]
+# Snapshot times before kick-off, in hours (closing price is always included).
+early_snapshots_hours = [24, 2]
+# Accept a fuzzy (name-similarity) match only if both team scores reach this value (0-1).
+fuzzy_min_score = 0.8
