@@ -96,8 +96,8 @@ def test_run_end_to_end(tmp_path):
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    ev = run.evaluate(rows, half_lives=(180,), priors=(5,))
-    assert len(ev["forecasts"]["poisson"]) == 4
+    ev = run.evaluate(rows, half_lives=(180,), priors=(5,), elo_grid=[(20, 75, 100, 0.2)])
+    assert len(ev["forecasts"]["poisson"]) == 4 and len(ev["forecasts"]["elo"]) == 4
     text = run.render(ev)
     assert "season 2022-23" in text and "seasons 2020-21 to 2021-22" in text
     assert "tuned on 2021-22" in text

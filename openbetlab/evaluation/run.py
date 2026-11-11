@@ -4,17 +4,20 @@
 
 Steps:
 1. Test season = latest completed season (held out). Train = all earlier seasons.
-2. Poisson settings are tuned on the LAST TRAIN season (validation), walk-forward,
-   using only seasons before it. The test season is never looked at while tuning.
-3. Both models are scored once on the test season.
+2. Poisson and Elo settings are tuned on the LAST TRAIN season (validation),
+   walk-forward, using only seasons before it. The test season is never looked at
+   while tuning.
+3. All models are scored once on the test season.
 """
 
 from __future__ import annotations
 
 import argparse
+import itertools
 from collections import Counter
 from pathlib import Path
 
+from openbetlab.models.elo import EloParams, elo_forecasts
 from openbetlab.models.poisson import PoissonModel, walk_forward
 
 from .baseline import LeagueAverageModel, UniformModel
@@ -26,6 +29,9 @@ from .metrics import (OUTCOMES, brier_per_match, brier_score, calibration_table,
 ROOT = Path(__file__).resolve().parents[2]
 HALF_LIVES = (90, 180, 365, 730)
 PRIOR_GOALS = (5, 10, 20)
+# (K, home advantage, promotion gap, season regression)
+ELO_GRID = list(itertools.product((20, 30, 40, 50), (50, 75, 100), (0, 50, 100, 150),
+                                  (0.2, 0.4, 0.6)))
 
 
 def score(probs, matches) -> dict:
@@ -46,27 +52,48 @@ def tune_poisson(train, half_lives=HALF_LIVES, priors=PRIOR_GOALS):
     return best, grid, val_season
 
 
+def tune_elo(train, grid=ELO_GRID):
+    """Grid-search Elo settings on the last train season. Lowest log loss wins."""
+    val_season = max({m.season for m in train}, key=season_sort_key)
+    inner = time_split(train, val_season)
+    results = []
+    for k, h, gap, reg in grid:
+        probs, _ = elo_forecasts(inner.train, inner.test, EloParams(k, h, gap, reg))
+        results.append({"k": k, "home_adv": h, "promotion_gap": gap, "season_regression": reg,
+                        **score(probs, inner.test)})
+    return min(results, key=lambda g: g["log_loss"]), results
+
+
 def _table(headers, rows) -> str:
     return "\n".join(["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
                      + ["| " + " | ".join(str(v) for v in r) + " |" for r in rows])
 
 
-def evaluate(rows, holdout: str | None = None, half_lives=HALF_LIVES, priors=PRIOR_GOALS):
+def evaluate(rows, holdout: str | None = None, half_lives=HALF_LIVES, priors=PRIOR_GOALS,
+             elo_grid=ELO_GRID):
     skipped: dict = {}
     results = results_from_rows(rows, skipped)
     holdout = holdout or latest_complete_season(rows)
     split = time_split(results, holdout)
     best, grid, val_season = tune_poisson(split.train, half_lives, priors)
 
+    elo_best, elo_grid_res = tune_elo(split.train, elo_grid)
+    elo_probs, elo_link = elo_forecasts(
+        split.train, split.test,
+        EloParams(elo_best["k"], elo_best["home_adv"], elo_best["promotion_gap"],
+                  elo_best["season_regression"]))
+
     baseline = LeagueAverageModel().fit(split.train)
     forecasts = {
         "poisson": walk_forward(PoissonModel(best["half_life_days"], best["prior_goals"]),
                                 split.train, split.test),
+        "elo": elo_probs,
         "league_average": [baseline.predict(m) for m in split.test],
         "uniform": [UniformModel().predict(m) for m in split.test],
     }
     return {"split": split, "skipped": skipped, "best": best, "grid": grid,
-            "val_season": val_season, "baseline": baseline, "forecasts": forecasts}
+            "val_season": val_season, "baseline": baseline, "forecasts": forecasts,
+            "elo_best": elo_best, "elo_grid": elo_grid_res, "elo_link": elo_link}
 
 
 def render(ev) -> str:
@@ -93,7 +120,9 @@ def render(ev) -> str:
         "",
         "Lower is better. Reference: always 1/3 each = Brier 0.6667, log loss 1.0986.",
         "Poisson forecasts are walk-forward: refitted before each match date on earlier "
-        "matches only. The league-average baseline uses the train seasons only.",
+        "matches only. Elo ratings are updated match by match, each match predicted with "
+        "ratings from earlier dates only. The league-average baseline uses the train "
+        "seasons only.",
         "",
     ]
     rows = []
@@ -105,17 +134,19 @@ def render(ev) -> str:
     lines.append(_table(["Model", "League", "Matches", "Brier", "Log loss"], rows))
 
     outs = [m.outcome for m in split.test]
-    lines += ["", "## Is Poisson really better than the baseline?", "",
-              "Per-match score difference (Poisson minus league average). Negative = Poisson "
+    lines += ["", "## Are the differences real?", "",
+              "Per-match score difference (first model minus second). Negative = first model "
               "better. A gap larger than 2 standard errors is unlikely to be luck.", ""]
     diff_rows = []
-    for label, fn in (("Brier", brier_per_match), ("Log loss", log_loss_per_match)):
-        mean, se = paired_difference(fn(forecasts["poisson"], outs),
-                                     fn(forecasts["league_average"], outs))
-        diff_rows.append([label, f"{mean:+.4f}", f"{se:.4f}", f"{mean / se:+.1f}",
-                          "yes" if mean < -2 * se else "no"])
-    lines.append(_table(["Score", "Mean difference", "Std. error", "Difference / SE",
-                         "Clearly better?"], diff_rows))
+    for a, b in (("poisson", "league_average"), ("elo", "league_average"), ("elo", "poisson")):
+        for label, fn in (("Brier", brier_per_match), ("Log loss", log_loss_per_match)):
+            mean, se = paired_difference(fn(forecasts[a], outs), fn(forecasts[b], outs))
+            verdict = (f"{a} better" if mean < -2 * se else
+                       f"{b} better" if mean > 2 * se else "no clear difference")
+            diff_rows.append([f"{a} vs {b}", label, f"{mean:+.4f}", f"{se:.4f}",
+                              f"{mean / se:+.1f}", verdict])
+    lines.append(_table(["Comparison", "Score", "Mean difference", "Std. error",
+                         "Difference / SE", "Verdict"], diff_rows))
 
     lines += ["", f"## Poisson settings (tuned on {ev['val_season']}, a train season)", "",
               f"Chosen: half-life **{best['half_life_days']} days**, prior "
@@ -124,8 +155,24 @@ def render(ev) -> str:
                      [[g["half_life_days"], g["prior_goals"], g["n"], f"{g['brier']:.4f}",
                        f"{g['log_loss']:.4f}"] for g in ev["grid"]])]
 
+    eb, link = ev["elo_best"], ev["elo_link"]
+    top = sorted(ev["elo_grid"], key=lambda g: g["log_loss"])[:10]
+    lines += ["", f"## Elo settings (tuned on {ev['val_season']}, a train season)", "",
+              f"Chosen: K **{eb['k']}**, home advantage **{eb['home_adv']}**, promotion gap "
+              f"**{eb['promotion_gap']}**, season regression **{eb['season_regression']}** "
+              f"(lowest validation log loss of {len(ev['elo_grid'])} combinations; top 10 "
+              "shown).", "",
+              _table(["K", "Home adv.", "Promotion gap", "Season regression", "Val. matches",
+                      "Brier", "Log loss"],
+                     [[g["k"], g["home_adv"], g["promotion_gap"], g["season_regression"],
+                       g["n"], f"{g['brier']:.4f}", f"{g['log_loss']:.4f}"] for g in top]),
+              "", "Rating gap -> probability mapping (fitted on train seasons): "
+              f"b = {link.b:.4f} per 100 points, c1 = {link.c1:.4f}, c2 = {link.c2:.4f}. "
+              "Equal ratings give home {:.3f} / draw {:.3f} / away {:.3f}.".format(
+                  *link.predict(0))]
+
     names = dict(zip(OUTCOMES, ["home", "draw", "away"]))
-    for name in ("poisson", "league_average"):
+    for name in ("poisson", "elo", "league_average"):
         cal = calibration_table(forecasts[name], [m.outcome for m in split.test])
         lines += ["", f"## Calibration: {name} on the test season", "",
                   "*Actual* = how often that outcome happened. Well calibrated: actual ≈ "
