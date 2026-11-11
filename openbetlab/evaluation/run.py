@@ -254,7 +254,13 @@ def write_forecasts(ev, path: Path) -> None:
             # before looking at the held-out season or the market.
             "validation_log_loss": {"poisson": ev["best"]["log_loss"],
                                     "dixon_coles": ev["dc_best"]["log_loss"],
-                                    "elo": ev["elo_best"]["log_loss"]}}
+                                    "elo": ev["elo_best"]["log_loss"]},
+            # Settings chosen on the validation season (needed to re-run walk-forward).
+            "settings": {
+                "poisson": {k: ev["best"][k] for k in ("half_life_days", "prior_goals")},
+                "dixon_coles": {k: ev["dc_best"][k] for k in ("half_life_days", "prior_goals")},
+                "elo": {k: ev["elo_best"][k] for k in ("k", "home_adv", "promotion_gap",
+                                                       "season_regression")}}}
     path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
 
 

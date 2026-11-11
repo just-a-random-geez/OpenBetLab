@@ -98,6 +98,7 @@ def build(betfair_dir: Path, fixtures: list[FixtureRef], mapping: dict[str, str]
             row["overround"] = overround(odds) if complete else None
             for k, o, f in zip(SELECTIONS, odds, fair):
                 row[f"odds_{k}"] = o
+                row[f"price_time_{k}"] = by_sel[k].price_times[s]
                 row[f"implied_{k}"] = 1 / o if o and o > 1 else None
                 row[f"fair_prob_{k}"] = f
                 row[f"breakeven_prob_{k}"] = (breakeven_probability(o, settings.commission)
