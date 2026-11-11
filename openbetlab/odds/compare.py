@@ -1,8 +1,11 @@
 """Compare model forecasts with the Betfair market on the held-out season.
 
-    python -m openbetlab.odds.compare [--model poisson] [--snapshot close]
+    python -m openbetlab.odds.compare [--source validation|holdout] [--model ...] [--snapshot close]
 
-Inputs : data/clean/forecasts.csv (+ .json)   from `python -m openbetlab.evaluation.run`
+Default source is the VALIDATION season (2024-25). The held-out season (2025-26) is refused
+until docs/RESEARCH_PLAN_v1.md is FROZEN, so its odds can't influence the plan.
+
+Inputs : data/clean/forecasts[_validation].csv (+ forecasts.json) from evaluation.run
          data/odds/betfair_match_probs.csv    from `python -m openbetlab.odds.build`
 Outputs (gitignored - contain Betfair prices, personal use only):
          data/odds/model_vs_market.csv        one row per match x outcome
@@ -155,7 +158,7 @@ def render(joined: list[Joined], counts: dict, model: str, snapshot: str, settin
         f"{meta.get('validation_season', '?')}, before looking at the market)",
         f"- Market: Betfair last traded prices at snapshot `{snapshot}`, margin removed "
         "proportionally",
-        f"- Held-out season {meta.get('holdout_season', '?')}: {counts['held_out']} matches, "
+        f"- Season compared: {counts['held_out']} matches, "
         f"{counts['with_market']} with a complete market price, "
         f"{counts['without_market']} without (not scored)",
         f"- Commission used for 'edge after commission': {settings.commission:.1%}", "",
@@ -216,7 +219,9 @@ def _read(path: Path) -> list[dict]:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--forecasts", type=Path, default=ROOT / "data/clean/forecasts.csv")
+    p.add_argument("--source", choices=("validation", "holdout"), default="validation",
+                   help="holdout (2025-26) only once docs/RESEARCH_PLAN_v1.md is FROZEN")
+    p.add_argument("--forecasts", type=Path, default=None)
     p.add_argument("--market", type=Path, default=ROOT / "data/odds/betfair_match_probs.csv")
     p.add_argument("--model", default=None, help="default: best validation log loss")
     p.add_argument("--snapshot", default="close")
@@ -224,6 +229,15 @@ def main(argv=None) -> int:
     p.add_argument("--report", type=Path, default=ROOT / "reports/private/model_vs_market.md")
     p.add_argument("--settings", type=Path, default=ROOT / "config/settings.toml")
     a = p.parse_args(argv)
+    if a.source == "holdout":
+        from openbetlab.backtest.run import PLAN, plan_status
+        if not plan_status(PLAN)[0]:
+            print("Refusing: held-out model-vs-market results may only be produced once "
+                  "docs/RESEARCH_PLAN_v1.md is FROZEN. Use --source validation.")
+            return 2
+    if a.forecasts is None:
+        a.forecasts = ROOT / ("data/clean/forecasts.csv" if a.source == "holdout"
+                              else "data/clean/forecasts_validation.csv")
     for path, how in ((a.forecasts, "python -m openbetlab.evaluation.run"),
                       (a.market, "python -m openbetlab.odds.build")):
         if not path.exists():

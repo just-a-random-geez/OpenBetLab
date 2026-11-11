@@ -117,7 +117,10 @@ def render(result: CleanResult, *, as_of: dt.date, source: dict | None = None) -
         lines.append(_table(["Issue", "Count"], sorted(by_kind.items())))
         lines += ["", "<details><summary>All issues</summary>", ""]
         lines += ["Issue kinds: `date_outside_season` = date outside the season's normal "
-                  "window (kept as published, likely an upstream typo); `invalid_*` = value "
+                  "window (kept as published, likely an upstream typo); "
+                  "`date_inconsistent_with_round` = dated over 180 days before an earlier "
+                  "matchday (year typo inside the window; kept, flagged, excluded from "
+                  "evaluation); `invalid_*` = value "
                   "unreadable, stored as empty; `conflicting_duplicate` = same fixture listed "
                   "with different data, all copies excluded.", ""]
         lines += [f"- {i.league} {i.season} `{i.kind}`: {i.detail}" for i in result.issues]

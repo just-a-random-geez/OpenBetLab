@@ -55,12 +55,15 @@ class Match:
     et_away: int | None = None
     pen_home: int | None = None
     pen_away: int | None = None
+    # "" = date looks fine; otherwise why it can't be trusted (kept as published, flagged)
+    date_flag: str = ""
 
     def key(self) -> tuple:
         return (self.league, self.season, self.date, self.home_team, self.away_team)
 
     def content(self) -> tuple:
         d = asdict(self)
+        d.pop("date_flag")
         for k in ("source_file", "home_team_raw", "away_team_raw"):
             d.pop(k)
         return tuple(d.items())
@@ -143,6 +146,9 @@ def parse_match(raw: dict, league: str, season: str, source_file: str,
     if date is not None and window and not window[0] <= dt.date.fromisoformat(date) <= window[1]:
         # Kept as published (we don't guess the right date) but flagged.
         issues.append(Issue(league, season, "date_outside_season", f"{date} {where}"))
+        date_flag = "outside_season"
+    else:
+        date_flag = ""
     time = _valid_time(raw.get("time"), issues, league, season, where)
 
     score = raw.get("score")
@@ -180,8 +186,52 @@ def parse_match(raw: dict, league: str, season: str, source_file: str,
         home_team=mapper.canonical(t1), away_team=mapper.canonical(t2),
         home_team_raw=t1, away_team_raw=t2, status=status,
         ft_home=ft_h, ft_away=ft_a, ht_home=ht_h, ht_away=ht_a,
-        et_home=et_h, et_away=et_a, pen_home=p_h, pen_away=p_a,
+        et_home=et_h, et_away=et_a, pen_home=p_h, pen_away=p_a, date_flag=date_flag,
     )
+
+
+ROUND_GAP_DAYS = 180
+
+
+def round_number(round_name: str | None) -> int | None:
+    """'Matchday 14', 'Regular, Matchday 14', '14. Round' -> 14; play-off rounds -> None."""
+    if not round_name:
+        return None
+    nums = re.findall(r"\d+", round_name)
+    return int(nums[-1]) if nums else None
+
+
+def flag_dates_inconsistent_with_round(matches: list[Match], issues: list[Issue]) -> int:
+    """Flag matches dated far too EARLY for their matchday (e.g. a year typo inside the
+    season window: 2019-20 restart games dated 2019-07 instead of 2020-07).
+
+    For each league-season, a match in matchday N is flagged when its date is more than
+    ROUND_GAP_DAYS before the median date of some earlier matchday M < N. Re-arranged
+    games are played LATER, never half a season earlier, so these can only be wrong dates.
+    """
+    from statistics import median_low
+    by_ls: dict[tuple, dict[int, list[Match]]] = defaultdict(lambda: defaultdict(list))
+    for m in matches:
+        n = round_number(m.round)
+        if m.date and n is not None:
+            by_ls[(m.league, m.season)][n].append(m)
+    flagged = 0
+    for (league, season), rounds in by_ls.items():
+        medians = {n: dt.date.fromisoformat(median_low(sorted(x.date for x in ms)))
+                   for n, ms in rounds.items()}
+        latest_earlier = None
+        for n in sorted(rounds):
+            if latest_earlier is not None:
+                for m in rounds[n]:
+                    if (latest_earlier - dt.date.fromisoformat(m.date)).days > ROUND_GAP_DAYS \
+                            and not m.date_flag:
+                        m.date_flag = "inconsistent_with_round"
+                        flagged += 1
+                        issues.append(Issue(league, season, "date_inconsistent_with_round",
+                                            f"{m.date} {m.home_team} v {m.away_team} "
+                                            f"({m.round}; earlier matchdays ~{latest_earlier})"))
+            latest_earlier = max(filter(None, [latest_earlier, medians[n]]))
+    return flagged
 
 
 def iter_league_files(raw_dir: Path, leagues: set[str] | None = None):
@@ -232,6 +282,7 @@ def clean(raw_dir: Path, mapper: TeamNameMapper, as_of: dt.date,
             issues.append(Issue(league, season, "conflicting_duplicate",
                                 f"{key[2]} {key[3]} v {key[4]}: {len(group)} different versions"))
 
+    flag_dates_inconsistent_with_round(result.matches, issues)
     result.matches.sort(key=lambda m: (m.league, m.season, m.date or "", m.home_team))
     result.unknown_teams = set(mapper.unknown)
     return result

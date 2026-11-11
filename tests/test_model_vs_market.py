@@ -127,5 +127,9 @@ def test_cli_end_to_end(tmp_path):
     assert len(list(csv.DictReader(out.open()))) == 9
 
 
+def test_cli_refuses_holdout_before_plan_frozen():
+    assert C.main(["--source", "holdout"]) == 2
+
+
 def test_cli_missing_inputs(tmp_path):
     assert C.main(["--forecasts", str(tmp_path / "x.csv"), "--market", str(tmp_path / "y.csv")]) == 1

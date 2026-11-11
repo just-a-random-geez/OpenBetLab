@@ -31,6 +31,12 @@ def test_outcome():
     assert (outcome(2, 1), outcome(1, 1), outcome(0, 3)) == ("H", "D", "A")
 
 
+def test_flagged_dates_are_excluded():
+    r = row("2019-20", "2019-07-04", 1, 0)
+    r["date_flag"] = "inconsistent_with_round"
+    assert results_from_rows([r]) == []
+
+
 def test_out_of_season_dates_are_excluded():
     skipped = {}
     rs = results_from_rows([row("2025-26", "2025-03-01", 1, 0), row("2025-26", "2025-09-01", 1, 0)],

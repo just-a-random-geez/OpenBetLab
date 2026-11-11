@@ -37,12 +37,13 @@ def load_matches_csv(path: Path) -> list[dict]:
 
 
 def date_is_trustworthy(row: dict) -> bool:
-    """Date present and inside the season's normal window.
+    """Date present, inside the season's normal window, and not flagged by cleaning
+    (e.g. dated far too early for its matchday).
 
-    Matches with an out-of-season date (upstream typo) can't be placed in time, so a
-    model could see them "before" matches they actually came after. They are excluded.
+    Matches with an untrustworthy date can't be placed in time, so a model could see
+    them "before" matches they actually came after. They are excluded.
     """
-    if not row["date"]:
+    if not row["date"] or row.get("date_flag"):
         return False
     window = season_window(row["season"])
     return window is None or window[0] <= dt.date.fromisoformat(row["date"]) <= window[1]

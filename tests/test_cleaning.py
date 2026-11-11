@@ -137,3 +137,36 @@ def test_date_outside_season_is_flagged_not_changed(write_raw, mapper):
     x = one(r)
     assert x.date == "2025-03-01"
     assert [i.kind for i in r.issues] == ["date_outside_season"]
+
+
+def test_round_number():
+    assert (C.round_number("Matchday 14"), C.round_number("Regular, Matchday 3"),
+            C.round_number("24. Round"), C.round_number("Playoffs")) == (14, 3, 24, None)
+
+
+def test_year_typo_inside_season_window_is_flagged(write_raw, mapper):
+    ms = [m(date="2019-08-10", score=[1, 0], round="Matchday 1"),
+          m(team1="Arsenal FC", date="2020-03-07", score=[0, 0], round="Matchday 29"),
+          # restart game: really 2020-07-04, published as 2019-07-04 (inside the window)
+          m(team1="Hull City", team2="Arsenal FC", date="2019-07-04", score=[2, 2],
+            round="Matchday 30"),
+          # re-arranged game played LATE is fine
+          m(team1="Arsenal FC", team2="Stoke City", date="2020-04-20", score=[1, 1],
+            round="Matchday 3")]
+    r = run(write_raw("2019-20", "en.1", ms), mapper, as_of=dt.date(2021, 1, 1))
+    flags = {(x.home_team, x.round): x.date_flag for x in r.matches}
+    assert flags[("Hull City AFC", "Matchday 30")] == "inconsistent_with_round"
+    assert flags[("Arsenal FC", "Matchday 3")] == ""
+    assert sum(i.kind == "date_inconsistent_with_round" for i in r.issues) == 1
+
+
+def test_real_data_restart_typos_are_flagged():
+    import csv
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "data/clean/matches.csv"
+    if not path.exists():
+        import pytest
+        pytest.skip("clean data not built")
+    rows = [r for r in csv.DictReader(path.open()) if r["date_flag"] == "inconsistent_with_round"]
+    assert rows and all(r["season"] == "2019-20" and r["date"].startswith("2019-07")
+                        for r in rows)
