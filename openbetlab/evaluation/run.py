@@ -234,6 +234,30 @@ def render(ev) -> str:
     return "\n".join(lines) + "\n"
 
 
+def write_forecasts(ev, path: Path) -> None:
+    """Per-match held-out forecasts of every model + validation log loss per tuned model.
+
+    Used by the model-vs-market comparison (Phase 3).
+    """
+    import csv
+    split, fc = ev["split"], ev["forecasts"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["league", "season", "date", "home_team", "away_team", "outcome"]
+                   + [f"{m}_{k}" for m in fc for k in ("home", "draw", "away")])
+        for i, m in enumerate(split.test):
+            w.writerow([m.league, m.season, m.date, m.home_team, m.away_team, m.outcome]
+                       + [f"{x:.6f}" for name in fc for x in fc[name][i]])
+    meta = {"holdout_season": split.holdout_season, "validation_season": ev["val_season"],
+            # Validation (training-data) log loss: the only fair way to pick a model
+            # before looking at the held-out season or the market.
+            "validation_log_loss": {"poisson": ev["best"]["log_loss"],
+                                    "dixon_coles": ev["dc_best"]["log_loss"],
+                                    "elo": ev["elo_best"]["log_loss"]}}
+    path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--matches", type=Path, default=ROOT / "data/clean/matches.csv")
@@ -241,6 +265,7 @@ def main(argv=None) -> int:
                    help="default: latest season with no matches still scheduled")
     p.add_argument("--report", type=Path, default=ROOT / "docs/evaluation_report.md")
     p.add_argument("--comparison", type=Path, default=ROOT / "reports/model_comparison.md")
+    p.add_argument("--forecasts", type=Path, default=ROOT / "data/clean/forecasts.csv")
     a = p.parse_args(argv)
 
     ev = evaluate(load_matches_csv(a.matches), a.holdout_season)
@@ -249,6 +274,7 @@ def main(argv=None) -> int:
     for path, text in ((a.report, render(ev)), (a.comparison, render_comparison(ev, build_info))):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+    write_forecasts(ev, a.forecasts)
     s = ev["split"]
     print(f"holdout {s.holdout_season}: train {len(s.train)}, test {len(s.test)} -> {a.report}, {a.comparison}")
     return 0

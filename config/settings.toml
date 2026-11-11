@@ -10,3 +10,8 @@ commission = 0.05
 early_snapshots_hours = [24, 2]
 # Accept a fuzzy (name-similarity) match only if both team scores reach this value (0-1).
 fuzzy_min_score = 0.8
+
+[compare]
+# A match is listed as a "disagreement" when model and market probabilities differ by at
+# least this much on any outcome (0.10 = 10 percentage points).
+disagreement_threshold = 0.10

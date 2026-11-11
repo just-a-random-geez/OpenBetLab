@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from openbetlab.evaluation import run
@@ -106,6 +108,16 @@ def test_run_end_to_end(tmp_path):
     for c in ev["calibration"].values():
         assert c["seasons"] == ["2021-22"] and c["last_date"] < test_start
         assert c["calibrator"].n_fit == 4
+
+    fpath = tmp_path / "fc.csv"
+    run.write_forecasts(ev, fpath)
+    saved = list(csv.DictReader(fpath.open()))
+    assert len(saved) == 4 and saved[0]["season"] == "2022-23"
+    assert float(saved[0]["elo_home"]) + float(saved[0]["elo_draw"]) + \
+        float(saved[0]["elo_away"]) == pytest.approx(1, abs=1e-5)
+    meta = json.loads(fpath.with_suffix(".json").read_text())
+    assert set(meta["validation_log_loss"]) == {"poisson", "dixon_coles", "elo"}
+    assert meta["validation_season"] == "2021-22"
 
     from openbetlab.evaluation.comparison import render_comparison
     comp = render_comparison(ev, {"as_of": "2026-11-11", "source_commit": "abc",
