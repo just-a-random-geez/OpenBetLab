@@ -263,6 +263,20 @@ def write_forecasts(ev, path: Path) -> None:
                                                        "season_regression")}}}
     path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
 
+    # Walk-forward forecasts for the VALIDATION season (a training season). Safe to combine
+    # with that season's odds for risk simulations without touching the held-out season.
+    val = ev["best"]["val_matches"]
+    tuned = {"poisson": ev["best"]["probs"], "dixon_coles": ev["dc_best"]["probs"],
+             "elo": ev["elo_best"]["probs"]}
+    with path.with_name(path.stem + "_validation.csv").open("w", newline="",
+                                                            encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["league", "season", "date", "home_team", "away_team", "outcome"]
+                   + [f"{m}_{k}" for m in tuned for k in ("home", "draw", "away")])
+        for i, m in enumerate(val):
+            w.writerow([m.league, m.season, m.date, m.home_team, m.away_team, m.outcome]
+                       + [f"{x:.6f}" for name in tuned for x in tuned[name][i]])
+
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
