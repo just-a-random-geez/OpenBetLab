@@ -10,10 +10,9 @@ each line is JSON like
 (ltp) at 1-minute intervals; no volumes or order book.
 
 Definitions used here
-- kick-off: the first time the market is seen in-play, if that is within 10 minutes
-  before to 30 minutes after the scheduled ``marketTime``. Otherwise (never seen
-  in-play, or the flag only shows up e.g. in the final settlement message) the scheduled
-  time is used. ``kickoff_source`` says which.
+- kick-off: the EARLIER of (first time the market is seen in-play, scheduled
+  ``marketTime``). Taking the earlier one means no in-play trade can ever be used as a
+  pre-match price. ``kickoff_source`` says which one was used.
 - closing price: the last traded price strictly before kick-off.
 - early price at H hours: the last traded price at or before kick-off minus H hours.
 A price is None when nothing had traded yet by that time - never invented.
@@ -77,28 +76,24 @@ class Market:
     status: str | None = None
     runners: dict[int, Runner] = field(default_factory=dict)
 
-    INPLAY_EARLY = dt.timedelta(minutes=10)
-    INPLAY_LATE = dt.timedelta(minutes=30)
-
-    def _inplay_trusted(self) -> bool:
-        if self.inplay_time is None:
-            return False
-        if self.scheduled_start is None:
-            return True
-        return (self.scheduled_start - self.INPLAY_EARLY <= self.inplay_time
-                <= self.scheduled_start + self.INPLAY_LATE)
-
     @property
     def kickoff(self) -> dt.datetime | None:
-        return self.inplay_time if self._inplay_trusted() else self.scheduled_start
+        """The EARLIER of the first in-play time and the scheduled start.
+
+        Never later than either signal, so no in-play trade can ever count as a pre-match
+        price: if the market went in-play early, we cut there; if the in-play flag shows up
+        late (e.g. only in the settlement message), the scheduled start is used.
+        """
+        times = [t for t in (self.inplay_time, self.scheduled_start) if t is not None]
+        return min(times) if times else None
 
     @property
     def kickoff_source(self) -> str:
-        if self._inplay_trusted():
-            return "in_play"
         if self.inplay_time is None:
             return "scheduled"
-        return "scheduled (in-play time out of range)"
+        if self.scheduled_start is None or self.inplay_time <= self.scheduled_start:
+            return "in_play"
+        return "scheduled (in-play seen later)"
 
     def teams(self) -> tuple[str, str] | None:
         """Home and away names from the event name 'Home v Away'."""

@@ -35,14 +35,14 @@ def test_parse_definition_and_runners():
     assert m.event_name == "Man City v Wolves" and m.market_type == "MATCH_ODDS"
     assert m.scheduled_start == KO
     assert m.inplay_time == KO + dt.timedelta(minutes=2)
-    assert m.kickoff_source == "in_play"
+    assert m.kickoff == KO                      # earlier of in-play (KO+2) and scheduled (KO)
     assert set(m.selections()) == {"home", "draw", "away"}
     assert m.winner() == "home"
 
 
 def test_closing_and_early_prices():
     rows = {r.selection: r for r in price_rows(market(), early_hours=(24, 2))}
-    # closing = last trade before the market went in-play (KO + 2 min)
+    # closing = last trade before kick-off
     assert [rows[s].prices["close"] for s in ("home", "draw", "away")] == [1.60, 4.2, 6.8]
     # 24h before kick-off: last trades at or before then
     assert rows["home"].prices["24h"] == 1.52
@@ -67,15 +67,26 @@ def test_missing_price_is_none_not_invented():
 
 def test_scheduled_time_used_when_in_play_flag_only_seen_late():
     m = market(inplay_at=None)      # in-play flag first appears in the settlement message
-    assert m.kickoff == KO and m.kickoff_source == "scheduled (in-play time out of range)"
+    assert m.kickoff == KO and m.kickoff_source == "scheduled (in-play seen later)"
     rows = {r.selection: r for r in price_rows(m)}
     assert rows["home"].prices["close"] == 1.60       # trade at KO+3min excluded (strictly before)
 
 
-def test_in_play_time_trusted_only_near_scheduled_start():
-    assert market(inplay_at=KO + dt.timedelta(minutes=25)).kickoff_source == "in_play"
-    late = market(inplay_at=KO + dt.timedelta(minutes=45))
-    assert late.kickoff == KO
+def test_late_in_play_uses_scheduled_start():
+    late = market(inplay_at=KO + dt.timedelta(minutes=25))
+    assert late.kickoff == KO and late.kickoff_source == "scheduled (in-play seen later)"
+
+
+def test_early_in_play_cuts_prices_at_in_play_time():
+    """Reviewer case: market in-play at 11:30 while the scheduled time says 14:00.
+    In-play trades at 11:50 must never become the closing or 2h price."""
+    early = KO - dt.timedelta(hours=2, minutes=30)                  # 11:30
+    ticks = [(KO - dt.timedelta(hours=5), {"home": 1.9, "draw": 3.4, "away": 4.2}),
+             (early + dt.timedelta(minutes=20), {"home": 1.2, "draw": 7.0, "away": 15.0})]
+    m = market(ticks=ticks, inplay_at=early)
+    assert m.kickoff == early and m.kickoff_source == "in_play"
+    rows = {r.selection: r for r in price_rows(m, early_hours=(2,))}
+    assert rows["home"].prices["close"] == 1.9 and rows["home"].prices["2h"] == 1.9
 
 
 def test_runner_order_by_name_not_position():
