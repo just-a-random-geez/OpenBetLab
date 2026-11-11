@@ -83,7 +83,15 @@ def bankroll_svg(curve: list[float], start: float, width=800, height=300) -> str
             f'<text x="{width / 2 - 60}" y="{height - 8}">bets in time order ({n})</text></svg>')
 
 
-def render(result, s, ps, rules: PlanRules, sha: str, frozen: bool, holdout: str) -> str:
+def summarise_result(result, rules: PlanRules):
+    bets = result.bets
+    return summarise([b.profit for b in bets], [b.won for b in bets], [b.clv for b in bets],
+                     rules.stake, rules.start_bankroll, groups=[b.kickoff_utc for b in bets],
+                     clusters=[b.date for b in bets])
+
+
+def render(result, s, ps, rules: PlanRules, sha: str, frozen: bool, holdout: str,
+           sens=None) -> str:
     def pct(x):
         return "-" if x is None else f"{x:+.2%}"
     lines = ["# Backtest v1 (PRIVATE - contains Betfair prices)", "",
@@ -97,10 +105,13 @@ def render(result, s, ps, rules: PlanRules, sha: str, frozen: bool, holdout: str
              f"| Hit rate | {'-' if s.hit_rate is None else f'{s.hit_rate:.1%}'} |",
              f"| Staked | £{s.staked:.2f} |", f"| Profit after commission | £{s.profit:+.2f} |",
              f"| ROI | {pct(s.roi)} |",
-             f"| ROI 95% CI (bootstrap) | "
+             f"| ROI on all {s.qualifying_bets} qualifying bets (ignoring ruin) | "
+             f"{pct(s.roi_all_bets)} |",
+             f"| ROI 95% CI (bootstrap by match day) | "
              + ("-" if s.roi_ci95 is None else f"{s.roi_ci95[0]:+.2%} to {s.roi_ci95[1]:+.2%}")
              + " |",
-             f"| Average CLV | {pct(s.avg_clv)} ({s.clv_bets} bets with a closing price) |",
+             f"| Average CLV (before commission) | {pct(s.avg_clv)} ({s.clv_bets} bets with a "
+             "closing price) |",
              f"| Worst drawdown | £{s.max_drawdown:.2f} ({s.max_drawdown_pct:.1%} of peak) |",
              f"| Longest losing run | {s.longest_losing_run} |",
              f"| Bankroll £{rules.start_bankroll:.0f} → | £{s.final_bankroll:.2f}"
@@ -108,6 +119,16 @@ def render(result, s, ps, rules: PlanRules, sha: str, frozen: bool, holdout: str
              "Bankroll curve: `reports/private/bankroll_v1.svg`. Bets: "
              "`data/odds/backtest_bets.csv`.", "",
              "Skipped matches: " + ", ".join(f"{k} {v}" for k, v in result.skipped.items())]
+    if sens:
+        lines += ["", "## Spread sensitivity (not a pass criterion)", "",
+                  "Last traded prices may not be backable: the same rules re-run taking each "
+                  "price 1 or 2 Betfair ticks worse.", "",
+                  "| Haircut | Bets | ROI | ROI 95% CI |", "|---|---|---|---|"]
+        for ticks, x in sens:
+            ci = "-" if x.roi_ci95 is None else f"{x.roi_ci95[0]:+.2%} to {x.roi_ci95[1]:+.2%}"
+            lines.append(f"| {ticks} tick(s) | {x.bets} | {pct(x.roi)} | {ci} |")
+    lines += ["", "CLV is measured before commission: a small positive CLV can still lose "
+              "money after commission."]
     if ps is not None:
         lines += ["", "## Parlays (HYPOTHETICAL - Betfair Exchange has no multiples)", "",
                   f"- {ps.bets} parlays, {ps.wins} won, profit £{ps.profit:+.2f}, ROI {pct(ps.roi)}"]
@@ -141,8 +162,13 @@ def main(argv=None) -> int:
         prices = load_prices(list(csv.DictReader(fh)))
     result = run_backtest(split.train, split.test, prices,
                           make_forecaster(rules.model, meta["settings"]), rules)
-    s = summarise([b.profit for b in result.bets], [b.won for b in result.bets],
-                  [b.clv for b in result.bets], rules.stake, rules.start_bankroll)
+    s = summarise_result(result, rules)
+    forecaster = make_forecaster(rules.model, meta["settings"])
+    sens = []
+    for ticks in (1, 2):
+        alt_rules = dataclasses.replace(rules, price_haircut_ticks=ticks)
+        sens.append((ticks, summarise_result(
+            run_backtest(split.train, split.test, prices, forecaster, alt_rules), alt_rules)))
     ps = (summarise([x.profit for x in result.parlays], [x.won for x in result.parlays],
                     [None] * len(result.parlays), rules.stake, rules.start_bankroll)
           if rules.parlays else None)
@@ -158,7 +184,8 @@ def main(argv=None) -> int:
         for b in result.bets:
             w.writerow(dataclasses.asdict(b))
     (priv / "bankroll_v1.svg").write_text(bankroll_svg(s.curve, rules.start_bankroll))
-    (priv / "backtest_v1.md").write_text(render(result, s, ps, rules, sha, frozen, holdout))
+    (priv / "backtest_v1.md").write_text(render(result, s, ps, rules, sha, frozen, holdout,
+                                                sens))
     print(f"{s.bets} bets, ROI {s.roi} -> {priv / 'backtest_v1.md'}")
     return 0
 

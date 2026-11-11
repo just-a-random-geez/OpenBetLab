@@ -8,7 +8,8 @@ import pytest
 
 from openbetlab.backtest import run as R
 from openbetlab.backtest.engine import (MarketPrices, PlanRules, Snapshot, build_parlays,
-                                        choose_bet, edge_after_commission, run_backtest)
+                                        choose_bet, edge_after_commission, price_problem,
+                                        run_backtest, tick_down)
 from openbetlab.backtest.metrics import (bankroll_curve, bootstrap_roi_ci, longest_losing_run,
                                          max_drawdown, summarise)
 from openbetlab.evaluation.data import Result, outcome
@@ -165,17 +166,47 @@ def test_missing_price_means_no_bet():
 
 def test_bankroll_drawdown_losing_run():
     profits = [0.95, -1, -1, -1, 1.9, -1]
-    curve, used, ruined = bankroll_curve(profits, 100, 1)
+    curve, placed, ruined = bankroll_curve(profits, 100, 1)
     assert curve == pytest.approx([100, 100.95, 99.95, 98.95, 97.95, 99.85, 98.85])
-    assert (used, ruined) == (6, False)
+    assert (len(placed), ruined) == (6, False)
     dd, pct = max_drawdown(curve)
     assert dd == pytest.approx(3.0) and pct == pytest.approx(3 / 100.95)
     assert longest_losing_run([True, False, False, False, True, False]) == 3
 
 
 def test_ruin_stops_betting():
-    curve, used, ruined = bankroll_curve([-1] * 5, 2.5, 1)
-    assert ruined and used == 2 and curve[-1] == 0.5
+    curve, placed, ruined = bankroll_curve([-1] * 5, 2.5, 1)
+    assert ruined and len(placed) == 2 and curve[-1] == 0.5
+
+
+def test_worst_percentage_drawdown_tracked_separately():
+    # reviewer counter-example: 100 -> 50 is -50%; 300 -> 240 is the bigger GBP fall but -20%
+    assert max_drawdown([100, 50, 300, 240]) == (60, 0.5)
+
+
+def test_simultaneous_bets_must_fit_in_bankroll_together():
+    # £1.50 left, two £1 bets at the same kick-off: only one can be placed
+    curve, placed, ruined = bankroll_curve([-98.5, -1, -1], 100, 1, groups=["a", "b", "b"])
+    assert placed == [0, 1] and curve[-1] == pytest.approx(0.5) and ruined
+    # same bets at different times: both placed
+    _, placed2, _ = bankroll_curve([-98.5, -1, 0.95], 100, 1, groups=["a", "b", "c"])
+    assert placed2 == [0, 1]                      # after the 2nd loss only £0.50 remains
+
+
+def test_roi_reported_on_all_qualifying_bets_too():
+    s = summarise([-1] * 3 + [10.0], [False] * 3 + [True], [None] * 4, 1, 2.5)
+    assert s.bets == 2 and s.ruined                   # betting stopped by ruin
+    assert s.qualifying_bets == 4 and s.roi_all_bets == pytest.approx(7 / 4)
+
+
+def test_bootstrap_by_day_is_wider_when_days_move_together():
+    # two bets per day that always share their fate: per-day resampling sees fewer
+    # independent units, so its interval must be wider than treating bets as independent
+    profits = [1.0, 1.0, -1.0, -1.0] * 15
+    days = [i // 2 for i in range(len(profits))]
+    lo_b, hi_b = bootstrap_roi_ci(profits, 1)
+    lo_d, hi_d = bootstrap_roi_ci(profits, 1, days)
+    assert (hi_d - lo_d) > (hi_b - lo_b)
 
 
 def test_summary():
@@ -250,3 +281,94 @@ def test_load_prices_and_svg():
     p = R.load_prices(rows)[("en.1", "s", "2024-08-01", "A", "B")]
     assert p.snapshots["2h"].odds == (2.0, 3.5, 4.0) and p.snapshots["2h"].times[1] is None
     assert R.bankroll_svg([100, 101, 99.5], 100).startswith("<svg")
+
+
+# --------------------------------------------------------------------- price availability
+
+def test_price_problems():
+    r = PlanRules()   # pick 2h before KO, price must be <= 60 min older than pick time
+    ok = Snapshot((2.0, 3.5, 4.0), (0.5, 0.28, 0.22), ("2024-08-01T12:30:00+00:00",) * 3)
+    assert price_problem(ok, KO, "2024-08-01", r) is None
+    stale = Snapshot((2.0, 3.5, 4.0), (0.5, 0.28, 0.22),
+                     ("2024-08-01T12:30:00+00:00", "2024-07-31T20:00:00+00:00",
+                      "2024-08-01T12:30:00+00:00"))
+    assert price_problem(stale, KO, "2024-08-01", r) == "stale pick-time price"
+    partial = Snapshot((2.0, None, 4.0), (None,) * 3, ("2024-08-01T12:30:00+00:00",) * 3)
+    assert price_problem(partial, KO, "2024-08-01", r) == "incomplete pick-time price"
+    early = PlanRules(pick_snapshot="24h")
+    s24 = Snapshot((2.0, 3.5, 4.0), (0.5, 0.28, 0.22), ("2024-07-31T14:30:00+00:00",) * 3)
+    assert price_problem(s24, KO, "2024-08-01", early) == \
+        "pick time before the model's knowledge cut-off"
+
+
+def test_tick_down_follows_betfair_ladder():
+    assert [tick_down(o) for o in (1.5, 2.0, 2.02, 3.0, 4.0, 5.0, 6.2)] == \
+        [1.49, 1.99, 2.0, 2.98, 3.95, 4.9, 6.0]
+    assert tick_down(2.04, 2) == 2.0 and tick_down(1.01, 3) == 1.01
+
+
+def test_haircut_makes_prices_worse_never_better():
+    history, targets = _data()
+    base = run_backtest(history, targets, _prices(targets, _odds), forecaster, RULES)
+    cut = run_backtest(history, targets, _prices(targets, _odds), forecaster,
+                       PlanRules(min_edge=0.0, price_haircut_ticks=1))
+    by = {(b.date, b.match): b for b in base.bets}
+    assert cut.bets and all(b.odds < by[(b.date, b.match)].odds for b in cut.bets
+                            if (b.date, b.match) in by and b.selection ==
+                            by[(b.date, b.match)].selection)
+    assert len(cut.bets) <= len(base.bets)
+
+
+def test_no_future_data_many_cutoffs_and_same_day():
+    """Stronger version: for several cut-off dates, changing every result and price ON or
+    after the cut-off leaves every earlier bet unchanged, and bets ON the cut-off day are
+    unaffected by changing that same day's results."""
+    history, targets = _data()
+    base = run_backtest(history, targets, _prices(targets, _odds), forecaster, RULES)
+    dates = sorted({m.date for m in targets})
+    rng = np.random.default_rng(3)
+    for cutoff in dates[2::max(1, len(dates) // 5)]:
+        changed = []
+        for m in targets:
+            if m.date >= cutoff:
+                gh, ga = int(rng.poisson(3)), int(rng.poisson(3))
+                m = dataclasses.replace(m, home_goals=gh, away_goals=ga, outcome=outcome(gh, ga))
+            changed.append(m)
+        alt = run_backtest(history, changed, _prices(changed, _odds), forecaster, RULES)
+        assert [_key(b) for b in base.bets if b.date <= cutoff] == \
+            [_key(b) for b in alt.bets if b.date <= cutoff]
+
+
+def test_backtest_cli_end_to_end(tmp_path):
+    import csv
+    import json
+    history, targets = _data()
+    mpath = tmp_path / "matches.csv"
+    with mpath.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["league", "season", "date", "home_team", "away_team", "status",
+                    "ft_home", "ft_away", "date_flag"])
+        for m in history + targets:
+            w.writerow([m.league, m.season, m.date, m.home_team, m.away_team, "played",
+                        m.home_goals, m.away_goals, ""])
+    prices = _prices(targets, _odds)
+    kpath = tmp_path / "market.csv"
+    with kpath.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["league", "season", "match_date", "home_team", "away_team", "kickoff_utc",
+                    "snapshot"] + [f"{c}_{k}" for c in ("odds", "fair_prob", "price_time")
+                                   for k in ("home", "draw", "away")])
+        for key, mp in prices.items():
+            for label, sn in mp.snapshots.items():
+                w.writerow([*key, mp.kickoff_utc, label, *sn.odds, *sn.fair, *sn.times])
+    meta = tmp_path / "forecasts.json"
+    meta.write_text(json.dumps({"holdout_season": "2024-25", "settings": {
+        "poisson": {"half_life_days": 180, "prior_goals": 5}}}))
+    plan = tmp_path / "plan.md"
+    plan.write_text("# Plan\n\n> Status: FROZEN on 2026-11-12.\n")
+    assert R.main(["--plan", str(plan), "--matches", str(mpath), "--forecast-meta", str(meta),
+                   "--market", str(kpath), "--out-dir", str(tmp_path)]) == 0
+    report = (tmp_path / "reports/private/backtest_v1.md").read_text()
+    assert "(FROZEN)" in report and "Spread sensitivity" in report
+    assert "bootstrap by match day" in report and "before commission" in report
+    assert (tmp_path / "reports/private/bankroll_v1.svg").read_text().startswith("<svg")
