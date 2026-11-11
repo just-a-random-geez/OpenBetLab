@@ -97,7 +97,8 @@ def test_run_end_to_end(tmp_path):
         w.writeheader()
         w.writerows(rows)
     ev = run.evaluate(rows, half_lives=(180,), priors=(5,), elo_grid=[(20, 75, 100, 0.2)])
-    assert len(ev["forecasts"]["poisson"]) == 4 and len(ev["forecasts"]["elo"]) == 4
+    assert all(len(f) == 4 for f in ev["forecasts"].values())
+    assert set(ev["forecasts"]) >= {"poisson", "dixon_coles", "poisson_no_decay", "elo"}
     text = run.render(ev)
     assert "season 2022-23" in text and "seasons 2020-21 to 2021-22" in text
     assert "tuned on 2021-22" in text

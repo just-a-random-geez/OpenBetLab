@@ -20,6 +20,16 @@ Poisson forecasts are walk-forward: refitted before each match date on earlier m
 | poisson | en.2 | 557 | 0.6446 | 1.0668 |
 | poisson | en.3 | 271 | 0.6015 | 1.0069 |
 | poisson | en.4 | 276 | 0.6230 | 1.0379 |
+| dixon_coles | ALL | 1484 | 0.6252 | 1.0401 |
+| dixon_coles | en.1 | 380 | 0.6153 | 1.0258 |
+| dixon_coles | en.2 | 557 | 0.6447 | 1.0670 |
+| dixon_coles | en.3 | 271 | 0.6008 | 1.0065 |
+| dixon_coles | en.4 | 276 | 0.6233 | 1.0383 |
+| poisson_no_decay | ALL | 1484 | 0.6372 | 1.0571 |
+| poisson_no_decay | en.1 | 380 | 0.6318 | 1.0494 |
+| poisson_no_decay | en.2 | 557 | 0.6595 | 1.0871 |
+| poisson_no_decay | en.3 | 271 | 0.5988 | 1.0052 |
+| poisson_no_decay | en.4 | 276 | 0.6376 | 1.0580 |
 | elo | ALL | 1484 | 0.6228 | 1.0360 |
 | elo | en.1 | 380 | 0.6187 | 1.0290 |
 | elo | en.2 | 557 | 0.6397 | 1.0592 |
@@ -48,6 +58,10 @@ Per-match score difference (first model minus second). Negative = first model be
 | elo vs league_average | Log loss | -0.0394 | 0.0060 | -6.6 | elo better |
 | elo vs poisson | Brier | -0.0026 | 0.0027 | -1.0 | no clear difference |
 | elo vs poisson | Log loss | -0.0044 | 0.0039 | -1.1 | no clear difference |
+| dixon_coles vs poisson | Brier | -0.0002 | 0.0003 | -0.9 | no clear difference |
+| dixon_coles vs poisson | Log loss | -0.0003 | 0.0005 | -0.6 | no clear difference |
+| poisson vs poisson_no_decay | Brier | -0.0118 | 0.0037 | -3.2 | poisson better |
+| poisson vs poisson_no_decay | Log loss | -0.0167 | 0.0052 | -3.2 | poisson better |
 
 ## Poisson settings (tuned on 2024-25, a train season)
 
@@ -67,6 +81,27 @@ Chosen: half-life **365 days**, prior **10 goals** (lowest validation log loss).
 | 730 | 5 | 2041 | 0.6276 | 1.0422 |
 | 730 | 10 | 2041 | 0.6267 | 1.0409 |
 | 730 | 20 | 2041 | 0.6267 | 1.0411 |
+
+## Dixon-Coles settings (tuned on 2024-25, a train season)
+
+Chosen: half-life **365 days**, prior **10 goals**. Low-score correction rho per league (from the last fit, i.e. all matches before the final test date): en.1 -0.071, en.2 -0.039, en.3 +0.089, en.4 -0.017. rho near 0 = almost plain Poisson.
+
+| Half-life (days) | Prior (goals) | Val. matches | Brier | Log loss |
+|---|---|---|---|---|
+| 90 | 5 | 2041 | 0.6306 | 1.0461 |
+| 90 | 10 | 2041 | 0.6294 | 1.0449 |
+| 90 | 20 | 2041 | 0.6314 | 1.0483 |
+| 180 | 5 | 2041 | 0.6286 | 1.0434 |
+| 180 | 10 | 2041 | 0.6273 | 1.0417 |
+| 180 | 20 | 2041 | 0.6282 | 1.0436 |
+| 365 | 5 | 2041 | 0.6256 | 1.0392 |
+| 365 | 10 | 2041 | 0.6245 | 1.0376 |
+| 365 | 20 | 2041 | 0.6249 | 1.0385 |
+| 730 | 5 | 2041 | 0.6277 | 1.0424 |
+| 730 | 10 | 2041 | 0.6268 | 1.0411 |
+| 730 | 20 | 2041 | 0.6268 | 1.0413 |
+
+`poisson_no_decay` = the Poisson model with every past match weighted equally (prior 10 goals), to measure what time decay adds.
 
 ## Elo settings (tuned on 2024-25, a train season)
 
@@ -112,6 +147,31 @@ Rating gap -> probability mapping (fitted on train seasons): b = 0.5236 per 100 
 | away | 0.5-0.6 | 48 | 0.537 | 0.479 | -0.057 |
 | away | 0.6-0.7 | 11 | 0.634 | 0.636 | +0.002 |
 | away | 0.7-0.8 | 1 | 0.727 | 1.000 | +0.273 |
+
+## Calibration: dixon_coles on the test season
+
+*Actual* = how often that outcome happened. Well calibrated: actual ≈ predicted. Small buckets are noisy.
+
+| Outcome | Bucket | Matches | Mean predicted | Actual | Gap |
+|---|---|---|---|---|---|
+| home | 0.1-0.2 | 19 | 0.169 | 0.105 | -0.064 |
+| home | 0.2-0.3 | 121 | 0.263 | 0.207 | -0.057 |
+| home | 0.3-0.4 | 450 | 0.357 | 0.369 | +0.012 |
+| home | 0.4-0.5 | 546 | 0.448 | 0.438 | -0.010 |
+| home | 0.5-0.6 | 260 | 0.542 | 0.565 | +0.023 |
+| home | 0.6-0.7 | 74 | 0.635 | 0.716 | +0.081 |
+| home | 0.7-0.8 | 14 | 0.748 | 0.857 | +0.109 |
+| draw | 0.1-0.2 | 38 | 0.179 | 0.237 | +0.057 |
+| draw | 0.2-0.3 | 1377 | 0.256 | 0.257 | +0.001 |
+| draw | 0.3-0.4 | 69 | 0.311 | 0.275 | -0.035 |
+| away | 0.0-0.1 | 10 | 0.087 | 0.000 | -0.087 |
+| away | 0.1-0.2 | 138 | 0.169 | 0.152 | -0.016 |
+| away | 0.2-0.3 | 567 | 0.257 | 0.263 | +0.006 |
+| away | 0.3-0.4 | 528 | 0.344 | 0.331 | -0.012 |
+| away | 0.4-0.5 | 180 | 0.437 | 0.456 | +0.018 |
+| away | 0.5-0.6 | 51 | 0.535 | 0.471 | -0.065 |
+| away | 0.6-0.7 | 9 | 0.638 | 0.667 | +0.029 |
+| away | 0.7-0.8 | 1 | 0.721 | 1.000 | +0.279 |
 
 ## Calibration: elo on the test season
 

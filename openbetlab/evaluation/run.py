@@ -17,6 +17,7 @@ import itertools
 from collections import Counter
 from pathlib import Path
 
+from openbetlab.models.dixon_coles import DixonColesModel
 from openbetlab.models.elo import EloParams, elo_forecasts
 from openbetlab.models.poisson import PoissonModel, walk_forward
 
@@ -39,14 +40,15 @@ def score(probs, matches) -> dict:
     return {"n": len(matches), "brier": brier_score(probs, outs), "log_loss": log_loss(probs, outs)}
 
 
-def tune_poisson(train, half_lives=HALF_LIVES, priors=PRIOR_GOALS):
-    """Grid-search Poisson settings on the last train season (walk-forward). Lowest log loss wins."""
+def tune_poisson(train, half_lives=HALF_LIVES, priors=PRIOR_GOALS, model_cls=PoissonModel):
+    """Grid-search Poisson-type settings on the last train season (walk-forward).
+    Lowest log loss wins."""
     val_season = max({m.season for m in train}, key=season_sort_key)
     inner = time_split(train, val_season)
     grid = []
     for hl in half_lives:
         for k in priors:
-            probs = walk_forward(PoissonModel(hl, k), inner.train, inner.test)
+            probs = walk_forward(model_cls(hl, k), inner.train, inner.test)
             grid.append({"half_life_days": hl, "prior_goals": k, **score(probs, inner.test)})
     best = min(grid, key=lambda g: g["log_loss"])
     return best, grid, val_season
@@ -77,6 +79,13 @@ def evaluate(rows, holdout: str | None = None, half_lives=HALF_LIVES, priors=PRI
     split = time_split(results, holdout)
     best, grid, val_season = tune_poisson(split.train, half_lives, priors)
 
+    dc_best, dc_grid, _ = tune_poisson(split.train, half_lives, priors, DixonColesModel)
+    dc_model = DixonColesModel(dc_best["half_life_days"], dc_best["prior_goals"])
+    dc_probs = walk_forward(dc_model, split.train, split.test)
+    # Ablation: same Poisson model with every past match weighted equally (no time decay).
+    no_decay = PoissonModel(1e12, best["prior_goals"], max_age_factor=1)
+    no_decay_probs = walk_forward(no_decay, split.train, split.test)
+
     elo_best, elo_grid_res = tune_elo(split.train, elo_grid)
     elo_probs, elo_link = elo_forecasts(
         split.train, split.test,
@@ -87,13 +96,16 @@ def evaluate(rows, holdout: str | None = None, half_lives=HALF_LIVES, priors=PRI
     forecasts = {
         "poisson": walk_forward(PoissonModel(best["half_life_days"], best["prior_goals"]),
                                 split.train, split.test),
+        "dixon_coles": dc_probs,
+        "poisson_no_decay": no_decay_probs,
         "elo": elo_probs,
         "league_average": [baseline.predict(m) for m in split.test],
         "uniform": [UniformModel().predict(m) for m in split.test],
     }
     return {"split": split, "skipped": skipped, "best": best, "grid": grid,
             "val_season": val_season, "baseline": baseline, "forecasts": forecasts,
-            "elo_best": elo_best, "elo_grid": elo_grid_res, "elo_link": elo_link}
+            "elo_best": elo_best, "elo_grid": elo_grid_res, "elo_link": elo_link,
+            "dc_best": dc_best, "dc_grid": dc_grid, "dc_rho": dict(dc_model.rho)}
 
 
 def render(ev) -> str:
@@ -138,7 +150,8 @@ def render(ev) -> str:
               "Per-match score difference (first model minus second). Negative = first model "
               "better. A gap larger than 2 standard errors is unlikely to be luck.", ""]
     diff_rows = []
-    for a, b in (("poisson", "league_average"), ("elo", "league_average"), ("elo", "poisson")):
+    for a, b in (("poisson", "league_average"), ("elo", "league_average"), ("elo", "poisson"),
+                 ("dixon_coles", "poisson"), ("poisson", "poisson_no_decay")):
         for label, fn in (("Brier", brier_per_match), ("Log loss", log_loss_per_match)):
             mean, se = paired_difference(fn(forecasts[a], outs), fn(forecasts[b], outs))
             verdict = (f"{a} better" if mean < -2 * se else
@@ -154,6 +167,19 @@ def render(ev) -> str:
               _table(["Half-life (days)", "Prior (goals)", "Val. matches", "Brier", "Log loss"],
                      [[g["half_life_days"], g["prior_goals"], g["n"], f"{g['brier']:.4f}",
                        f"{g['log_loss']:.4f}"] for g in ev["grid"]])]
+
+    db = ev["dc_best"]
+    lines += ["", f"## Dixon-Coles settings (tuned on {ev['val_season']}, a train season)", "",
+              f"Chosen: half-life **{db['half_life_days']} days**, prior "
+              f"**{db['prior_goals']} goals**. Low-score correction rho per league "
+              "(from the last fit, i.e. all matches before the final test date): "
+              + ", ".join(f"{lg} {r:+.3f}" for lg, r in sorted(ev["dc_rho"].items()))
+              + ". rho near 0 = almost plain Poisson.", "",
+              _table(["Half-life (days)", "Prior (goals)", "Val. matches", "Brier", "Log loss"],
+                     [[g["half_life_days"], g["prior_goals"], g["n"], f"{g['brier']:.4f}",
+                       f"{g['log_loss']:.4f}"] for g in ev["dc_grid"]]),
+              "", "`poisson_no_decay` = the Poisson model with every past match weighted "
+              f"equally (prior {best['prior_goals']} goals), to measure what time decay adds."]
 
     eb, link = ev["elo_best"], ev["elo_link"]
     top = sorted(ev["elo_grid"], key=lambda g: g["log_loss"])[:10]
@@ -172,7 +198,7 @@ def render(ev) -> str:
                   *link.predict(0))]
 
     names = dict(zip(OUTCOMES, ["home", "draw", "away"]))
-    for name in ("poisson", "elo", "league_average"):
+    for name in ("poisson", "dixon_coles", "elo", "league_average"):
         cal = calibration_table(forecasts[name], [m.outcome for m in split.test])
         lines += ["", f"## Calibration: {name} on the test season", "",
                   "*Actual* = how often that outcome happened. Well calibrated: actual ≈ "

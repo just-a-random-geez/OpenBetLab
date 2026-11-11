@@ -119,6 +119,7 @@ class PoissonModel:
         # Matches older than max_age_factor half-lives (weight < ~1.6%) are skipped for speed.
         self.max_age_days = half_life_days * max_age_factor
         self.params: dict[str, LeagueParams] = {}
+        self.fit_data: dict[str, list] = {}  # league -> weighted matches used in the last fit
         self.as_of: dt.date | None = None
 
     def fit(self, history: Iterable[Result], as_of: dt.date) -> "PoissonModel":
@@ -138,9 +139,14 @@ class PoissonModel:
             # use the old matches anyway (their tiny weights keep teams near average).
             ms = recent or [x for _, x in items]
             params[lg] = fit_league(ms, self.prior_goals, start=self.params.get(lg))
+            self.fit_data[lg] = ms
         self.params = params
         self.as_of = as_of
+        self._after_fit()
         return self
+
+    def _after_fit(self) -> None:
+        """Hook for subclasses (e.g. Dixon-Coles) that fit extra parameters."""
 
     def expected_goals(self, match: Result) -> tuple[float, float]:
         p = self.params.get(match.league)
