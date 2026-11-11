@@ -1,0 +1,62 @@
+[build-system]
+# setuptools 77+ is needed for the SPDX `license = "Apache-2.0"` format below.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openbetlab"
+version = "0.1.0"
+description = "An open-source research foundation for studying betting odds and probability. It does not predict outcomes or place bets."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "OpenBetLab contributors" }]
+keywords = ["probability", "odds", "research", "education", "statistics"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+# No runtime dependencies: the package only uses the Python standard library.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    # Pinned so a new Ruff release cannot change formatting/lint results unexpectedly.
+    "ruff==0.17.4",
+]
+
+[project.scripts]
+openbetlab = "openbetlab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+openbetlab = ["data/*.csv", "data/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+# --doctest-modules also runs the small examples written in the docstrings.
+addopts = "-ra --strict-markers --doctest-modules"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names, ...)
+    "I",   # import sorting
+    "B",   # flake8-bugbear (likely bugs)
+    "UP",  # pyupgrade (modern Python syntax)
+    "SIM", # simplifications
+]

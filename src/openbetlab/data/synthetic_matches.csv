@@ -1,0 +1,11 @@
+# SYNTHETIC DATA - NOT REAL. Every team, date, score and price below was invented by hand for testing and demonstration.
+# These rows do not describe real matches, real teams or real bookmaker prices, and must not be used for real-world betting decisions.
+match_id,date,home_team,away_team,home_goals,away_goals,odds_home,odds_draw,odds_away
+SYN-001,2025-01-04,Synthetic Rovers,Example Athletic,2,1,2.10,3.40,3.60
+SYN-002,2025-01-04,Placeholder United,Fictional Town,1,1,2.60,3.20,2.80
+SYN-003,2025-01-05,Sample City,Test Wanderers,0,2,1.80,3.60,4.50
+SYN-004,2025-01-05,Demo Albion,Mock Rangers,3,0,1.55,4.10,6.00
+SYN-005,2025-01-11,Example Athletic,Placeholder United,0,0,2.40,3.10,3.20
+SYN-006,2025-01-11,Fictional Town,Sample City,1,2,3.10,3.30,2.35
+SYN-007,2025-01-12,Test Wanderers,Demo Albion,2,2,2.25,3.30,3.25
+SYN-008,2025-01-12,Mock Rangers,Synthetic Rovers,1,0,4.20,3.75,1.80
