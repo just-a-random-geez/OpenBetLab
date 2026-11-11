@@ -6,7 +6,9 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from openbetlab.data.cleaning import PLAYED, SCHEDULED
+import datetime as dt
+
+from openbetlab.data.cleaning import PLAYED, SCHEDULED, season_window
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,8 @@ class Result:
     home_team: str
     away_team: str
     outcome: str  # "H", "D", "A"
+    home_goals: int | None = None
+    away_goals: int | None = None
 
 
 def outcome(ft_home: int, ft_away: int) -> str:
@@ -32,15 +36,36 @@ def load_matches_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(fh))
 
 
-def results_from_rows(rows: list[dict]) -> list[Result]:
-    """Matches usable for evaluation: status 'played' with a full-time score.
+def date_is_trustworthy(row: dict) -> bool:
+    """Date present and inside the season's normal window.
 
-    Awarded matches (decided off the pitch) and anything without a score are left out.
+    Matches with an out-of-season date (upstream typo) can't be placed in time, so a
+    model could see them "before" matches they actually came after. They are excluded.
+    """
+    if not row["date"]:
+        return False
+    window = season_window(row["season"])
+    return window is None or window[0] <= dt.date.fromisoformat(row["date"]) <= window[1]
+
+
+def results_from_rows(rows: list[dict], skipped: dict | None = None) -> list[Result]:
+    """Matches usable for evaluation: status 'played', full-time score, trustworthy date.
+
+    Awarded matches (decided off the pitch), anything without a score and matches
+    with an untrustworthy date are left out (counted in ``skipped`` if given).
     Sorted by season, then date - never shuffled.
     """
-    out = [Result(r["league"], r["season"], r["date"], r["home_team"], r["away_team"],
-                  outcome(int(r["ft_home"]), int(r["ft_away"])))
-           for r in rows if r["status"] == PLAYED and r["ft_home"] != "" and r["ft_away"] != ""]
+    out = []
+    for r in rows:
+        if r["status"] != PLAYED or r["ft_home"] == "" or r["ft_away"] == "":
+            continue
+        if not date_is_trustworthy(r):
+            if skipped is not None:
+                skipped["bad_date"] = skipped.get("bad_date", 0) + 1
+            continue
+        gh, ga = int(r["ft_home"]), int(r["ft_away"])
+        out.append(Result(r["league"], r["season"], r["date"], r["home_team"],
+                          r["away_team"], outcome(gh, ga), gh, ga))
     out.sort(key=lambda m: (season_sort_key(m.season), m.date, m.league, m.home_team))
     return out
 

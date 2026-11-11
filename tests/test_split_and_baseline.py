@@ -29,6 +29,13 @@ def test_outcome():
     assert (outcome(2, 1), outcome(1, 1), outcome(0, 3)) == ("H", "D", "A")
 
 
+def test_out_of_season_dates_are_excluded():
+    skipped = {}
+    rs = results_from_rows([row("2025-26", "2025-03-01", 1, 0), row("2025-26", "2025-09-01", 1, 0)],
+                           skipped)
+    assert [r.date for r in rs] == ["2025-09-01"] and skipped == {"bad_date": 1}
+
+
 def test_only_played_matches_used_and_sorted_by_time():
     rs = results_from_rows(ROWS)
     assert len(rs) == 6                                   # no missing, no awarded, no scheduled
@@ -89,10 +96,11 @@ def test_run_end_to_end(tmp_path):
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    rep = tmp_path / "r.md"
-    run.main(["--matches", str(path), "--report", str(rep)])
-    text = rep.read_text()
+    ev = run.evaluate(rows, half_lives=(180,), priors=(5,))
+    assert len(ev["forecasts"]["poisson"]) == 4
+    text = run.render(ev)
     assert "season 2022-23" in text and "seasons 2020-21 to 2021-22" in text
+    assert "tuned on 2021-22" in text
     assert "| uniform | ALL | 4 | 0.6667 | 1.0986 |" in text
     # train rates H .5 D .25 A .25; test outcomes H D A H -> Brier = (0.375+0.875+0.875+0.375)/4
     assert "| league_average | ALL | 4 | 0.6250 |" in text

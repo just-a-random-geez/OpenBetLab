@@ -26,13 +26,35 @@ def _check(probs: Sequence[Probs], outcomes: Sequence[str]) -> None:
             raise ValueError(f"invalid probabilities {tuple(p)}: need 3 values in [0,1] summing to 1")
 
 
+def brier_per_match(probs: Sequence[Probs], outcomes: Sequence[str]) -> list[float]:
+    _check(probs, outcomes)
+    return [sum((pk - (k == o)) ** 2 for pk, k in zip(p, OUTCOMES))
+            for p, o in zip(probs, outcomes)]
+
+
+def log_loss_per_match(probs: Sequence[Probs], outcomes: Sequence[str],
+                       eps: float = 1e-15) -> list[float]:
+    _check(probs, outcomes)
+    return [-math.log(max(p[OUTCOMES.index(o)], eps)) for p, o in zip(probs, outcomes)]
+
+
+def paired_difference(a: Sequence[float], b: Sequence[float]) -> tuple[float, float]:
+    """Mean of (a - b) per match and its standard error.
+
+    Negative mean = model a scored lower (better). If |mean| > 2 * SE the gap is
+    unlikely to be luck (roughly 95% confidence).
+    """
+    if len(a) != len(b) or len(a) < 2:
+        raise ValueError("need two equal-length lists with at least 2 values")
+    d = [x - y for x, y in zip(a, b)]
+    mean = sum(d) / len(d)
+    var = sum((x - mean) ** 2 for x in d) / (len(d) - 1)
+    return mean, math.sqrt(var / len(d))
+
+
 def brier_score(probs: Sequence[Probs], outcomes: Sequence[str]) -> float:
     """Mean over matches of sum_k (p_k - y_k)^2. 0 = perfect, 2 = worst, 2/3 = always 1/3 each."""
-    _check(probs, outcomes)
-    total = 0.0
-    for p, o in zip(probs, outcomes):
-        total += sum((pk - (k == o)) ** 2 for pk, k in zip(p, OUTCOMES))
-    return total / len(probs)
+    return sum(brier_per_match(probs, outcomes)) / len(probs)
 
 
 def log_loss(probs: Sequence[Probs], outcomes: Sequence[str], eps: float = 1e-15) -> float:
@@ -41,8 +63,7 @@ def log_loss(probs: Sequence[Probs], outcomes: Sequence[str], eps: float = 1e-15
     A probability of 0 on the actual outcome is clipped to ``eps`` so the score stays finite
     (it is still a huge penalty).
     """
-    _check(probs, outcomes)
-    return -sum(math.log(max(p[OUTCOMES.index(o)], eps)) for p, o in zip(probs, outcomes)) / len(probs)
+    return sum(log_loss_per_match(probs, outcomes, eps)) / len(probs)
 
 
 @dataclass

@@ -46,21 +46,15 @@ is reported too, as a "knows nothing" floor.
 - Only matches with status *played* are used. Awarded results (decided off
   the pitch), cancelled games and missing results are left out.
 
-## Current result (test season 2025-26, 1,569 matches)
+## Current result
 
-| Model | Brier | Log loss |
-|---|---|---|
-| league average | 0.6503 | 1.0747 |
-| uniform 1/3 | 0.6667 | 1.0986 |
+See `docs/evaluation_report.md` and `docs/PHASE2_POISSON.md`. On the 2025-26
+test season the league-average baseline scores Brier 0.6508 / log loss 1.0754
+(1/3 each: 0.6667 / 1.0986).
 
-The baseline is only a little better than guessing, as expected. The
-calibration gaps are within ±0.02: home teams won 43.7% (predicted 43.0%).
-This is the bar for Phase 3.
-
-Notes: League One/Two 2025-26 test sets are smaller (356 / 276 matches),
-because those results are missing upstream (see the data-quality report).
-Play-off matches are included as normal matches; a few are at neutral
-venues.
+Matches whose date falls outside their season (upstream typo, 85 played
+League One 2025-26 matches) are excluded from evaluation: their real date is
+unknown, so we can't guarantee a model only used earlier matches.
 
 ## Files
 

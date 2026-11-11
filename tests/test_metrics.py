@@ -2,7 +2,8 @@ import math
 
 import pytest
 
-from openbetlab.evaluation.metrics import brier_score, calibration_table, log_loss
+from openbetlab.evaluation.metrics import (brier_per_match, brier_score, calibration_table,
+                                          log_loss, paired_difference)
 
 U = (1 / 3, 1 / 3, 1 / 3)
 
@@ -63,3 +64,17 @@ def test_calibration_table():
     assert rows[("D", 0.2)].n == 3 and rows[("D", 0.2)].actual_rate == pytest.approx(1 / 3)
     assert ("H", 0.0) not in rows                  # empty buckets omitted
     assert sum(r.n for r in calibration_table(probs, outs) if r.outcome == "A") == 4
+
+
+def test_per_match_scores_average_to_total():
+    probs, outs = [(0.5, 0.3, 0.2), (0.2, 0.3, 0.5)], ["H", "D"]
+    assert sum(brier_per_match(probs, outs)) / 2 == pytest.approx(brier_score(probs, outs))
+
+
+def test_paired_difference():
+    mean, se = paired_difference([1.0, 2.0, 3.0], [1.5, 2.5, 3.0])
+    assert mean == pytest.approx(-1 / 3)
+    # diffs -0.5, -0.5, 0 -> sd = 0.2887, se = sd / sqrt(3)
+    assert se == pytest.approx(0.288675 / 3 ** 0.5, rel=1e-4)
+    with pytest.raises(ValueError):
+        paired_difference([1.0], [1.0])
