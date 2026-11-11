@@ -70,7 +70,7 @@ Made-up season, so the numbers mean nothing about our model. They show the
 - Parlays raise the risk sharply: with 4 legs, ruin chance is 26% even when
   the model is assumed right, and 53% when it isn't.
 - Half-Kelly with rollover has the biggest upside under "model" truth and the
-  worst downside under "market" truth (90% chance of halving the bankroll).
+  worst downside under "market" truth (90% chance of halving the bankroll, 45% ruin).
 - A model only 5% overconfident cuts the median profit roughly in half.
 
 ## Limitations
@@ -78,8 +78,10 @@ Made-up season, so the numbers mean nothing about our model. They show the
 - Results are independent between matches (no shared shocks like weather or
   a bad weekend for favourites).
 - Prices are taken as available in full (no liquidity limit, no slippage).
-- With proportional staking, stakes can fall below Betfair's £1 minimum
-  without the simulation stopping; ruin is only declared below £1 bankroll.
+- Stakes below Betfair's £1 minimum are raised to £1 (review fix: before it, rollover
+  and Kelly could never be "ruined" because they could bet pennies). With that fix,
+  under "market" truth Kelly 25% with rollover goes from 0% to ~18% ruin, half-Kelly
+  from ~1% to ~45%.
 - Same-day bets are sized from that morning's bankroll and settled together.
 
 ## Files
