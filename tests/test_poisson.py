@@ -128,3 +128,22 @@ def test_walk_forward_does_not_depend_on_future_results():
     p1 = walk_forward(PoissonModel(), history, t1)
     p2 = walk_forward(PoissonModel(), history, t2)
     assert p1 == p2  # forecasts can't change because of a result not yet played
+
+
+def test_walk_forward_many_future_changes_and_same_day():
+    """Change EVERY result on or after a cut-off date (including that day): forecasts for
+    matches up to and including the cut-off day must not move."""
+    hist = [res(f"2020-08-{d:02d}", h, a, (d * 7) % 4, (d * 3) % 3)
+            for d, (h, a) in enumerate([("A", "B"), ("C", "D"), ("B", "C"), ("D", "A"),
+                                        ("A", "C"), ("B", "D")] * 4, start=1) if d <= 28]
+    targets = [res(f"2020-09-{d:02d}", h, a, d % 3, (d + 1) % 2)
+               for d, (h, a) in enumerate([("A", "B"), ("C", "D"), ("B", "C"), ("D", "A")] * 3,
+                                          start=1)]
+    cutoff = "2020-09-06"
+    changed = [res(m.date, m.home_team, m.away_team, 9, 0) if m.date >= cutoff else m
+               for m in targets]
+    p1 = walk_forward(PoissonModel(), hist, targets)
+    p2 = walk_forward(PoissonModel(), hist, changed)
+    for m, a, b in zip(targets, p1, p2):
+        if m.date <= cutoff:
+            assert a == b

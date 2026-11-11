@@ -21,7 +21,8 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 SEED = 20261111
-MIN_STAKE = 1.0   # GBP; Betfair minimum. Bankroll below this = ruin (can't bet any more).
+MIN_STAKE = 1.0   # GBP; Betfair minimum. Smaller stakes are raised to this.
+                  # Bankroll below this = ruin (can't bet any more).
 
 
 @dataclass(frozen=True)
@@ -150,18 +151,20 @@ def simulate(opps: list[Opportunity], sc: Scenario, n_seasons: int = 10_000,
     for day in sorted(by_day):
         day_bets = by_day[day]
         base = bank if sc.rollover else np.full(n_seasons, start)
-        alive = bank >= MIN_STAKE
+        # Betfair's minimum stake is £1: any wanted stake below £1 is raised to £1. Bets are
+        # placed in edge order while the money not yet committed today still covers them;
+        # the rest of the day's bets are not placed.
+        committed = np.zeros(n_seasons)
         stakes = []
         for b in day_bets:
             if sc.staking == "flat":
                 s = base * (sc.flat_stake / 100) if sc.rollover else np.full(n_seasons, sc.flat_stake)
             else:
                 s = base * sc.kelly_fraction * kelly_fraction(b.model_p, b.odds, sc.commission)
-            stakes.append(np.where(alive, s, 0.0))
-        stakes = np.array(stakes)                       # (bets today, seasons)
-        total = stakes.sum(axis=0)
-        scale = np.where(total > bank, bank / np.maximum(total, 1e-12), 1.0)  # can't stake more than you have
-        stakes *= scale
+            s = np.maximum(s, MIN_STAKE)
+            s = np.where(bank - committed >= s, s, 0.0)
+            committed += s
+            stakes.append(s)
         for b, s in zip(day_bets, stakes):
             won = np.ones(n_seasons, bool)
             for m, tp in b.legs:
@@ -177,7 +180,7 @@ def simulate(opps: list[Opportunity], sc: Scenario, n_seasons: int = 10_000,
 def default_scenarios() -> list[Scenario]:
     """One-change-at-a-time around a base case (the research-plan rules), for each truth."""
     out = []
-    for truth in ("model", "market"):
+    for truth in ("market", "model"):    # no-edge case first: it is the sober baseline
         b = Scenario(f"{truth}: base (flat £1, singles, odds 1.5-5)", truth=truth)
         out += [
             b,

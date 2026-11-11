@@ -74,6 +74,8 @@ def fit_rho(lam, mu, gh, ga, w) -> float:
     concave in rho, so golden-section search finds the maximum.
     """
     lam, mu, gh, ga, w = map(np.asarray, (lam, mu, gh, ga, w))
+    # Bounds from ALL matches (not just low scores), so tau stays positive for every match.
+    a, b = rho_bounds(lam, mu)
     low = (gh <= 1) & (ga <= 1)
     if not low.any():
         return 0.0
@@ -88,7 +90,6 @@ def fit_rho(lam, mu, gh, ga, w) -> float:
                      np.where(c10, 1 + mu * rho, np.where(c11, 1 - rho, 1.0))))
         return float((w * np.log(t)).sum())
 
-    a, b = rho_bounds(lam, mu)
     g = (math.sqrt(5) - 1) / 2
     c, d = b - g * (b - a), a + g * (b - a)
     fc, fd = ll(c), ll(d)

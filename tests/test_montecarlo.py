@@ -135,3 +135,21 @@ def test_cli_synthetic_and_holdout_guard(tmp_path):
     assert "measures RISK, not edge" in text and "SYNTHETIC" in text and "seed 20261111" in text
     assert R.main(["--source", "holdout"]) == 2       # plan not frozen
     assert len(synthetic_season()) == 2000
+
+
+def test_min_stake_makes_ruin_possible_with_rollover():
+    """Reviewer counter-example: with 1% rollover stakes the bankroll used to shrink forever
+    without ever being 'ruined', because stakes below Betfair's £1 minimum were allowed."""
+    o = Opportunity("d", (0.9, 0.05, 0.05), (0.0, 0.5, 0.5), (2.0, 20.0, 20.0))
+    opps = [replace(o, date=f"d{i:03d}") for i in range(150)]
+    for sc in (Scenario("roll", truth="market", rollover=True),
+               Scenario("kelly roll", truth="market", staking="kelly", rollover=True)):
+        r = simulate(opps, sc, 200)
+        assert r.ruined.all() and (r.final < 1).all()
+
+
+def test_daily_stakes_never_exceed_bankroll():
+    o = Opportunity("d", (0.9, 0.05, 0.05), (0.0, 0.5, 0.5), (2.0, 20.0, 20.0))
+    opps = [o] * 300                          # 300 bets on ONE day, £100 bankroll, £1 each
+    r = simulate(opps, Scenario("one day", truth="market"), 50)
+    assert (r.final == 0).all()               # only 100 bets could be placed, all lost

@@ -121,3 +121,14 @@ def test_elo_forecasts_past_only():
     assert elo_forecasts(hist, alt, EloParams())[0] == probs   # target results never used
     with pytest.raises(ValueError, match="before"):
         elo_forecasts(hist, [res("2020-09-01", "A", "B", "H")], EloParams())
+
+
+def test_elo_many_future_changes_do_not_move_earlier_or_same_day_ratings():
+    ms = [res(f"2020-09-{d:02d}", h, a, "HDA"[d % 3])
+          for d, (h, a) in enumerate([("A", "B"), ("C", "D"), ("A", "C"), ("B", "D")] * 5,
+                                     start=1)]
+    cutoff = "2020-09-10"
+    alt = [res(m.date, m.home_team, m.away_team, "A") if m.date >= cutoff else m for m in ms]
+    d1, d2 = EloRatings(NO_REG).run(ms), EloRatings(NO_REG).run(alt)
+    assert [x for m, x in zip(ms, d1) if m.date <= cutoff] == \
+        [x for m, x in zip(ms, d2) if m.date <= cutoff]

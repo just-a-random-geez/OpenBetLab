@@ -47,7 +47,10 @@ def render(results, source: str, n: int, seed: int, extra: list[str]) -> str:
              "- Every scenario uses the same simulated results for the same match, so "
              "scenarios are compared on equal luck.",
              "- Start bankroll £100. Ruin = bankroll below £1 (Betfair's minimum stake). "
-             "Bets placed on the same day are sized from that morning's bankroll.",
+             "Stakes below £1 are raised to £1. Bets placed on the same day are sized from "
+             "that morning's bankroll and must fit in it together.",
+             "- **Read the 'market' rows first**: they show the strategy when the model has no "
+             "edge. 'Model' rows assume the model is right, so their profit is built in.",
              *extra, "",
              "Profit columns are £ at the end of the season (median and 5th / 95th "
              "percentile). 'Worst drawdown' = median across seasons of the biggest fall from "

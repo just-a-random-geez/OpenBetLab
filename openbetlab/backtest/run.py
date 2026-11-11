@@ -122,11 +122,11 @@ def render(result, s, ps, rules: PlanRules, sha: str, frozen: bool, holdout: str
     if sens:
         lines += ["", "## Spread sensitivity (not a pass criterion)", "",
                   "Last traded prices may not be backable: the same rules re-run taking each "
-                  "price 1 or 2 Betfair ticks worse.", "",
-                  "| Haircut | Bets | ROI | ROI 95% CI |", "|---|---|---|---|"]
-        for ticks, x in sens:
+                  "price 1 or 2 Betfair ticks worse, and with 2% commission.", "",
+                  "| Variant | Bets | ROI | ROI 95% CI |", "|---|---|---|---|"]
+        for label, x in sens:
             ci = "-" if x.roi_ci95 is None else f"{x.roi_ci95[0]:+.2%} to {x.roi_ci95[1]:+.2%}"
-            lines.append(f"| {ticks} tick(s) | {x.bets} | {pct(x.roi)} | {ci} |")
+            lines.append(f"| {label} | {x.bets} | {pct(x.roi)} | {ci} |")
     lines += ["", "CLV is measured before commission: a small positive CLV can still lose "
               "money after commission."]
     if ps is not None:
@@ -165,9 +165,11 @@ def main(argv=None) -> int:
     s = summarise_result(result, rules)
     forecaster = make_forecaster(rules.model, meta["settings"])
     sens = []
-    for ticks in (1, 2):
-        alt_rules = dataclasses.replace(rules, price_haircut_ticks=ticks)
-        sens.append((ticks, summarise_result(
+    for label, change in (("1 tick worse", {"price_haircut_ticks": 1}),
+                          ("2 ticks worse", {"price_haircut_ticks": 2}),
+                          ("commission 2%", {"commission": 0.02})):
+        alt_rules = dataclasses.replace(rules, **change)
+        sens.append((label, summarise_result(
             run_backtest(split.train, split.test, prices, forecaster, alt_rules), alt_rules)))
     ps = (summarise([x.profit for x in result.parlays], [x.won for x in result.parlays],
                     [None] * len(result.parlays), rules.stake, rules.start_bankroll)

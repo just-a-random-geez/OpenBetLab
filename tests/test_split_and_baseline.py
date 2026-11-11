@@ -95,6 +95,7 @@ def test_uniform_model():
     assert UniformModel().fit([]).predict(r("en.1", "H")) == pytest.approx((1 / 3,) * 3)
 
 
+@pytest.mark.filterwarnings("ignore:Calibrator did not converge")   # 4-match toy data
 def test_run_end_to_end(tmp_path):
     import csv
     path = tmp_path / "m.csv"

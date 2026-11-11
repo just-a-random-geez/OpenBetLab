@@ -27,6 +27,7 @@ class Calibrator:
         self.w: float | None = None
         self.b: np.ndarray | None = None  # [b_home=0, b_draw, b_away]
         self.n_fit = 0
+        self.converged = False
 
     @staticmethod
     def _features(probs) -> np.ndarray:
@@ -50,6 +51,7 @@ class Calibrator:
         f[:, 1, 1] = 1
         f[:, 2, 2] = 1
         theta = np.array([1.0, 0.0, 0.0])
+        self.converged = False
         for _ in range(max_iter):
             q = self._softmax(np.einsum("nkj,j->nk", f, theta))
             grad = np.einsum("nk,nkj->j", q - y, f)
@@ -59,7 +61,12 @@ class Calibrator:
             step = np.linalg.solve(hess + 1e-9 * np.eye(3), grad)
             theta = theta - step
             if np.abs(step).max() < 1e-10:
+                self.converged = True
                 break
+        if not self.converged or not np.isfinite(theta).all():
+            import warnings
+            warnings.warn("Calibrator did not converge; check the data (too few or extreme "
+                          "forecasts?)", RuntimeWarning)
         self.w = float(theta[0])
         self.b = np.array([0.0, theta[1], theta[2]])
         self.n_fit = n

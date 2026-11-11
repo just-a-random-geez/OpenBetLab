@@ -278,6 +278,15 @@ def write_forecasts(ev, path: Path) -> None:
                        + [f"{x:.6f}" for name in tuned for x in tuned[name][i]])
 
 
+def write_forecast_hashes(paths: list[Path], out: Path) -> None:
+    """SHA-256 of the forecast files, committed to git BEFORE any odds are obtained, so
+    anyone can later check the forecasts were not changed after seeing prices."""
+    import hashlib
+    out.parent.mkdir(parents=True, exist_ok=True)
+    hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.exists()}
+    out.write_text(json.dumps(hashes, indent=2, sort_keys=True) + "\n")
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--matches", type=Path, default=ROOT / "data/clean/matches.csv")
@@ -295,6 +304,8 @@ def main(argv=None) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     write_forecasts(ev, a.forecasts)
+    write_forecast_hashes([a.forecasts, a.forecasts.with_name(a.forecasts.stem + "_validation.csv")],
+                          ROOT / "reports/forecast_hashes.json")
     s = ev["split"]
     print(f"holdout {s.holdout_season}: train {len(s.train)}, test {len(s.test)} -> {a.report}, {a.comparison}")
     return 0

@@ -26,6 +26,7 @@ def _distort(p, w, b):
 def test_already_calibrated_forecasts_are_left_almost_alone():
     p, rng = _true_probs(20000, 0)
     cal = Calibrator().fit([tuple(r) for r in p], _draw(p, rng))
+    assert cal.converged
     assert cal.w == pytest.approx(1, abs=0.05)
     assert cal.b == pytest.approx([0, 0, 0], abs=0.05)
 

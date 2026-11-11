@@ -2,10 +2,10 @@
 
 ## Split (by time, never shuffled)
 
-- Train: 23671 played matches, seasons 2010-11 to 2024-25
+- Train: 23528 played matches, seasons 2010-11 to 2024-25
 - Test (out-of-sample): 1484 played matches, season 2025-26
 - Later seasons not used: 145 matches
-- Played matches excluded for an out-of-season date (can't be placed in time): 85
+- Played matches excluded for an out-of-season date (can't be placed in time): 228
 - Test-season actual rates: home 0.434, draw 0.257, away 0.309
 
 ## Scores on the test season
@@ -25,9 +25,9 @@ Poisson forecasts are walk-forward: refitted before each match date on earlier m
 | dixon_coles | en.2 | 557 | 0.6447 | 1.0670 |
 | dixon_coles | en.3 | 271 | 0.6008 | 1.0065 |
 | dixon_coles | en.4 | 276 | 0.6233 | 1.0383 |
-| poisson_no_decay | ALL | 1484 | 0.6372 | 1.0571 |
-| poisson_no_decay | en.1 | 380 | 0.6318 | 1.0494 |
-| poisson_no_decay | en.2 | 557 | 0.6595 | 1.0871 |
+| poisson_no_decay | ALL | 1484 | 0.6371 | 1.0569 |
+| poisson_no_decay | en.1 | 380 | 0.6317 | 1.0491 |
+| poisson_no_decay | en.2 | 557 | 0.6593 | 1.0869 |
 | poisson_no_decay | en.3 | 271 | 0.5988 | 1.0052 |
 | poisson_no_decay | en.4 | 276 | 0.6376 | 1.0580 |
 | elo | ALL | 1484 | 0.6228 | 1.0360 |
@@ -36,8 +36,8 @@ Poisson forecasts are walk-forward: refitted before each match date on earlier m
 | elo | en.3 | 271 | 0.5913 | 0.9936 |
 | elo | en.4 | 276 | 0.6253 | 1.0404 |
 | league_average | ALL | 1484 | 0.6508 | 1.0754 |
-| league_average | en.1 | 380 | 0.6551 | 1.0823 |
-| league_average | en.2 | 557 | 0.6560 | 1.0829 |
+| league_average | en.1 | 380 | 0.6551 | 1.0822 |
+| league_average | en.2 | 557 | 0.6561 | 1.0830 |
 | league_average | en.3 | 271 | 0.6294 | 1.0439 |
 | league_average | en.4 | 276 | 0.6553 | 1.0819 |
 | uniform | ALL | 1484 | 0.6667 | 1.0986 |
@@ -53,7 +53,7 @@ Poisson forecasts are walk-forward: refitted before each match date on earlier m
 | dixon_coles_calibrated | ALL | 1484 | 0.6254 | 1.0402 |
 | dixon_coles_calibrated | en.1 | 380 | 0.6142 | 1.0239 |
 | dixon_coles_calibrated | en.2 | 557 | 0.6454 | 1.0679 |
-| dixon_coles_calibrated | en.3 | 271 | 0.6016 | 1.0078 |
+| dixon_coles_calibrated | en.3 | 271 | 0.6016 | 1.0077 |
 | dixon_coles_calibrated | en.4 | 276 | 0.6238 | 1.0388 |
 | elo_calibrated | ALL | 1484 | 0.6227 | 1.0358 |
 | elo_calibrated | en.1 | 380 | 0.6185 | 1.0284 |
@@ -68,15 +68,15 @@ Per-match score difference (first model minus second). Negative = first model be
 | Comparison | Score | Mean difference | Std. error | Difference / SE | Verdict |
 |---|---|---|---|---|---|
 | poisson vs league_average | Brier | -0.0254 | 0.0043 | -5.9 | poisson better |
-| poisson vs league_average | Log loss | -0.0350 | 0.0059 | -5.9 | poisson better |
+| poisson vs league_average | Log loss | -0.0351 | 0.0059 | -5.9 | poisson better |
 | elo vs league_average | Brier | -0.0280 | 0.0043 | -6.5 | elo better |
-| elo vs league_average | Log loss | -0.0394 | 0.0060 | -6.6 | elo better |
+| elo vs league_average | Log loss | -0.0395 | 0.0060 | -6.6 | elo better |
 | elo vs poisson | Brier | -0.0026 | 0.0027 | -1.0 | no clear difference |
 | elo vs poisson | Log loss | -0.0044 | 0.0039 | -1.1 | no clear difference |
 | dixon_coles vs poisson | Brier | -0.0002 | 0.0003 | -0.9 | no clear difference |
 | dixon_coles vs poisson | Log loss | -0.0003 | 0.0005 | -0.6 | no clear difference |
-| poisson vs poisson_no_decay | Brier | -0.0118 | 0.0037 | -3.2 | poisson better |
-| poisson vs poisson_no_decay | Log loss | -0.0167 | 0.0052 | -3.2 | poisson better |
+| poisson vs poisson_no_decay | Brier | -0.0117 | 0.0037 | -3.1 | poisson better |
+| poisson vs poisson_no_decay | Log loss | -0.0166 | 0.0052 | -3.2 | poisson better |
 
 ## Poisson settings (tuned on 2024-25, a train season)
 
@@ -91,11 +91,11 @@ Chosen: half-life **365 days**, prior **10 goals** (lowest validation log loss).
 | 180 | 10 | 2041 | 0.6259 | 1.0396 |
 | 180 | 20 | 2041 | 0.6269 | 1.0416 |
 | 365 | 5 | 2041 | 0.6253 | 1.0387 |
-| 365 | 10 | 2041 | 0.6242 | 1.0371 |
+| 365 | 10 | 2041 | 0.6241 | 1.0371 |
 | 365 | 20 | 2041 | 0.6245 | 1.0379 |
-| 730 | 5 | 2041 | 0.6276 | 1.0422 |
-| 730 | 10 | 2041 | 0.6267 | 1.0409 |
-| 730 | 20 | 2041 | 0.6267 | 1.0411 |
+| 730 | 5 | 2041 | 0.6275 | 1.0421 |
+| 730 | 10 | 2041 | 0.6266 | 1.0408 |
+| 730 | 20 | 2041 | 0.6267 | 1.0410 |
 
 ## Dixon-Coles settings (tuned on 2024-25, a train season)
 
@@ -103,18 +103,18 @@ Chosen: half-life **365 days**, prior **10 goals**. Low-score correction rho per
 
 | Half-life (days) | Prior (goals) | Val. matches | Brier | Log loss |
 |---|---|---|---|---|
-| 90 | 5 | 2041 | 0.6306 | 1.0461 |
-| 90 | 10 | 2041 | 0.6294 | 1.0449 |
+| 90 | 5 | 2041 | 0.6305 | 1.0460 |
+| 90 | 10 | 2041 | 0.6294 | 1.0448 |
 | 90 | 20 | 2041 | 0.6314 | 1.0483 |
-| 180 | 5 | 2041 | 0.6286 | 1.0434 |
-| 180 | 10 | 2041 | 0.6273 | 1.0417 |
+| 180 | 5 | 2041 | 0.6285 | 1.0433 |
+| 180 | 10 | 2041 | 0.6272 | 1.0416 |
 | 180 | 20 | 2041 | 0.6282 | 1.0436 |
 | 365 | 5 | 2041 | 0.6256 | 1.0392 |
 | 365 | 10 | 2041 | 0.6245 | 1.0376 |
-| 365 | 20 | 2041 | 0.6249 | 1.0385 |
-| 730 | 5 | 2041 | 0.6277 | 1.0424 |
-| 730 | 10 | 2041 | 0.6268 | 1.0411 |
-| 730 | 20 | 2041 | 0.6268 | 1.0413 |
+| 365 | 20 | 2041 | 0.6248 | 1.0385 |
+| 730 | 5 | 2041 | 0.6276 | 1.0422 |
+| 730 | 10 | 2041 | 0.6267 | 1.0410 |
+| 730 | 20 | 2041 | 0.6268 | 1.0412 |
 
 `poisson_no_decay` = the Poisson model with every past match weighted equally (prior 10 goals), to measure what time decay adds.
 
@@ -130,12 +130,12 @@ Chosen: K **30**, home advantage **100**, promotion gap **50**, season regressio
 | 40 | 100 | 100 | 0.2 | 2041 | 0.6251 | 1.0386 |
 | 20 | 75 | 50 | 0.4 | 2041 | 0.6251 | 1.0386 |
 | 30 | 100 | 50 | 0.2 | 2041 | 0.6251 | 1.0386 |
-| 20 | 100 | 50 | 0.4 | 2041 | 0.6251 | 1.0387 |
+| 20 | 100 | 50 | 0.4 | 2041 | 0.6251 | 1.0386 |
 | 20 | 50 | 50 | 0.4 | 2041 | 0.6251 | 1.0387 |
 | 30 | 75 | 50 | 0.2 | 2041 | 0.6251 | 1.0387 |
 | 40 | 100 | 100 | 0.4 | 2041 | 0.6252 | 1.0387 |
 
-Rating gap -> probability mapping (fitted on train seasons): b = 0.5236 per 100 points, c1 = -0.8344, c2 = 0.3182. Equal ratings give home 0.421 / draw 0.276 / away 0.303.
+Rating gap -> probability mapping (fitted on train seasons): b = 0.5241 per 100 points, c1 = -0.8351, c2 = 0.3187. Equal ratings give home 0.421 / draw 0.276 / away 0.303.
 
 ## Calibration: poisson on the test season
 
@@ -196,18 +196,18 @@ Rating gap -> probability mapping (fitted on train seasons): b = 0.5236 per 100 
 |---|---|---|---|---|---|
 | home | 0.1-0.2 | 18 | 0.164 | 0.167 | +0.003 |
 | home | 0.2-0.3 | 142 | 0.260 | 0.183 | -0.077 |
-| home | 0.3-0.4 | 439 | 0.356 | 0.353 | -0.002 |
-| home | 0.4-0.5 | 534 | 0.445 | 0.478 | +0.032 |
+| home | 0.3-0.4 | 441 | 0.356 | 0.354 | -0.002 |
+| home | 0.4-0.5 | 532 | 0.446 | 0.477 | +0.032 |
 | home | 0.5-0.6 | 254 | 0.542 | 0.528 | -0.015 |
 | home | 0.6-0.7 | 83 | 0.636 | 0.723 | +0.087 |
 | home | 0.7-0.8 | 12 | 0.740 | 0.833 | +0.093 |
 | home | 0.8-0.9 | 2 | 0.831 | 0.500 | -0.331 |
 | draw | 0.1-0.2 | 33 | 0.173 | 0.212 | +0.039 |
-| draw | 0.2-0.3 | 1451 | 0.266 | 0.258 | -0.007 |
-| away | 0.0-0.1 | 8 | 0.083 | 0.000 | -0.083 |
-| away | 0.1-0.2 | 162 | 0.167 | 0.160 | -0.007 |
-| away | 0.2-0.3 | 556 | 0.255 | 0.234 | -0.021 |
-| away | 0.3-0.4 | 535 | 0.343 | 0.376 | +0.032 |
+| draw | 0.2-0.3 | 1451 | 0.266 | 0.258 | -0.008 |
+| away | 0.0-0.1 | 8 | 0.082 | 0.000 | -0.082 |
+| away | 0.1-0.2 | 163 | 0.167 | 0.160 | -0.008 |
+| away | 0.2-0.3 | 557 | 0.255 | 0.233 | -0.021 |
+| away | 0.3-0.4 | 533 | 0.343 | 0.377 | +0.034 |
 | away | 0.4-0.5 | 168 | 0.440 | 0.417 | -0.024 |
 | away | 0.5-0.6 | 46 | 0.534 | 0.543 | +0.009 |
 | away | 0.6-0.7 | 6 | 0.635 | 0.667 | +0.032 |
@@ -220,15 +220,15 @@ Rating gap -> probability mapping (fitted on train seasons): b = 0.5236 per 100 
 | Outcome | Bucket | Matches | Mean predicted | Actual | Gap |
 |---|---|---|---|---|---|
 | home | 0.4-0.5 | 1484 | 0.431 | 0.434 | +0.003 |
-| draw | 0.2-0.3 | 1484 | 0.263 | 0.257 | -0.005 |
-| away | 0.2-0.3 | 557 | 0.299 | 0.318 | +0.019 |
+| draw | 0.2-0.3 | 1484 | 0.263 | 0.257 | -0.006 |
+| away | 0.2-0.3 | 557 | 0.298 | 0.318 | +0.019 |
 | away | 0.3-0.4 | 927 | 0.311 | 0.303 | -0.008 |
 
 League rates learned by the baseline from the train seasons:
 
 | League | Home | Draw | Away |
 |---|---|---|---|
-| en.1 | 0.449 | 0.240 | 0.311 |
-| en.2 | 0.429 | 0.272 | 0.299 |
+| en.1 | 0.448 | 0.241 | 0.311 |
+| en.2 | 0.429 | 0.272 | 0.298 |
 | en.3 | 0.425 | 0.260 | 0.314 |
 | en.4 | 0.415 | 0.277 | 0.307 |

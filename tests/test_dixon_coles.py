@@ -106,3 +106,14 @@ def test_dixon_coles_cannot_see_the_future():
     alt = [targets[0], res("2021-02-08", "B", "A", 7, 0)]
     assert walk_forward(DixonColesModel(), hist, targets) == \
         walk_forward(DixonColesModel(), hist, alt)
+
+
+def test_rho_bounds_use_all_matches_not_only_low_scores():
+    # reviewer case: a 3-1 match with lam=3, mu=1 limits rho < 1/3 even though it is not
+    # a low score; rho must respect it so tau(0,0) stays positive for that match too
+    gh, ga = _simulate(0.3, 20000, lam=1.0, mu=1.0, seed=4)
+    n = len(gh)
+    lam = [1.0] * n + [3.0]
+    mu = [1.0] * n + [1.0]
+    est = fit_rho(lam, mu, list(gh) + [3], list(ga) + [1], [1.0] * (n + 1))
+    assert est < 1 / 3 and tau(0, 0, 3.0, 1.0, est) > 0
