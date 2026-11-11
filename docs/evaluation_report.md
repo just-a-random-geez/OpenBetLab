@@ -45,6 +45,21 @@ Poisson forecasts are walk-forward: refitted before each match date on earlier m
 | uniform | en.2 | 557 | 0.6667 | 1.0986 |
 | uniform | en.3 | 271 | 0.6667 | 1.0986 |
 | uniform | en.4 | 276 | 0.6667 | 1.0986 |
+| poisson_calibrated | ALL | 1484 | 0.6256 | 1.0404 |
+| poisson_calibrated | en.1 | 380 | 0.6148 | 1.0249 |
+| poisson_calibrated | en.2 | 557 | 0.6453 | 1.0678 |
+| poisson_calibrated | en.3 | 271 | 0.6025 | 1.0085 |
+| poisson_calibrated | en.4 | 276 | 0.6233 | 1.0380 |
+| dixon_coles_calibrated | ALL | 1484 | 0.6254 | 1.0402 |
+| dixon_coles_calibrated | en.1 | 380 | 0.6142 | 1.0239 |
+| dixon_coles_calibrated | en.2 | 557 | 0.6454 | 1.0679 |
+| dixon_coles_calibrated | en.3 | 271 | 0.6016 | 1.0078 |
+| dixon_coles_calibrated | en.4 | 276 | 0.6238 | 1.0388 |
+| elo_calibrated | ALL | 1484 | 0.6227 | 1.0358 |
+| elo_calibrated | en.1 | 380 | 0.6185 | 1.0284 |
+| elo_calibrated | en.2 | 557 | 0.6400 | 1.0597 |
+| elo_calibrated | en.3 | 271 | 0.5908 | 0.9931 |
+| elo_calibrated | en.4 | 276 | 0.6250 | 1.0399 |
 
 ## Are the differences real?
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import itertools
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from openbetlab.models.elo import EloParams, elo_forecasts
 from openbetlab.models.poisson import PoissonModel, walk_forward
 
 from .baseline import LeagueAverageModel, UniformModel
+from .calibration import Calibrator
+from .comparison import render_comparison
 from .data import (latest_complete_season, load_matches_csv, results_from_rows,
                    season_sort_key, time_split)
 from .metrics import (OUTCOMES, brier_per_match, brier_score, calibration_table, log_loss,
@@ -49,8 +52,10 @@ def tune_poisson(train, half_lives=HALF_LIVES, priors=PRIOR_GOALS, model_cls=Poi
     for hl in half_lives:
         for k in priors:
             probs = walk_forward(model_cls(hl, k), inner.train, inner.test)
-            grid.append({"half_life_days": hl, "prior_goals": k, **score(probs, inner.test)})
+            grid.append({"half_life_days": hl, "prior_goals": k, "probs": probs,
+                         **score(probs, inner.test)})
     best = min(grid, key=lambda g: g["log_loss"])
+    best["val_matches"] = inner.test
     return best, grid, val_season
 
 
@@ -62,8 +67,10 @@ def tune_elo(train, grid=ELO_GRID):
     for k, h, gap, reg in grid:
         probs, _ = elo_forecasts(inner.train, inner.test, EloParams(k, h, gap, reg))
         results.append({"k": k, "home_adv": h, "promotion_gap": gap, "season_regression": reg,
-                        **score(probs, inner.test)})
-    return min(results, key=lambda g: g["log_loss"]), results
+                        "probs": probs, **score(probs, inner.test)})
+    best = min(results, key=lambda g: g["log_loss"])
+    best["val_matches"] = inner.test
+    return best, results
 
 
 def _table(headers, rows) -> str:
@@ -102,7 +109,18 @@ def evaluate(rows, holdout: str | None = None, half_lives=HALF_LIVES, priors=PRI
         "league_average": [baseline.predict(m) for m in split.test],
         "uniform": [UniformModel().predict(m) for m in split.test],
     }
+    # Calibration: fitted ONLY on each model's out-of-sample (walk-forward) forecasts for
+    # the validation season, which is part of the training data. Applied unchanged to test.
+    calibration = {}
+    for name, tuned in (("poisson", best), ("dixon_coles", dc_best), ("elo", elo_best)):
+        val = tuned["val_matches"]
+        cal = Calibrator().fit(tuned["probs"], [m.outcome for m in val])
+        forecasts[f"{name}_calibrated"] = cal.transform(forecasts[name])
+        calibration[name] = {"calibrator": cal, "seasons": sorted({m.season for m in val}),
+                             "last_date": max(m.date for m in val)}
+
     return {"split": split, "skipped": skipped, "best": best, "grid": grid,
+            "calibration": calibration,
             "val_season": val_season, "baseline": baseline, "forecasts": forecasts,
             "elo_best": elo_best, "elo_grid": elo_grid_res, "elo_link": elo_link,
             "dc_best": dc_best, "dc_grid": dc_grid, "dc_rho": dict(dc_model.rho)}
@@ -222,13 +240,17 @@ def main(argv=None) -> int:
     p.add_argument("--holdout-season", default=None,
                    help="default: latest season with no matches still scheduled")
     p.add_argument("--report", type=Path, default=ROOT / "docs/evaluation_report.md")
+    p.add_argument("--comparison", type=Path, default=ROOT / "reports/model_comparison.md")
     a = p.parse_args(argv)
 
     ev = evaluate(load_matches_csv(a.matches), a.holdout_season)
-    a.report.parent.mkdir(parents=True, exist_ok=True)
-    a.report.write_text(render(ev), encoding="utf-8")
+    info_path = a.matches.parent / "build_info.json"
+    build_info = json.loads(info_path.read_text()) if info_path.exists() else {}
+    for path, text in ((a.report, render(ev)), (a.comparison, render_comparison(ev, build_info))):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
     s = ev["split"]
-    print(f"holdout {s.holdout_season}: train {len(s.train)}, test {len(s.test)} -> {a.report}")
+    print(f"holdout {s.holdout_season}: train {len(s.train)}, test {len(s.test)} -> {a.report}, {a.comparison}")
     return 0
 
 

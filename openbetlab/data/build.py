@@ -45,6 +45,9 @@ def main(argv=None) -> int:
     mapper = TeamNameMapper.from_csv_dir(a.names_dir)
     result = clean(a.raw_dir, mapper, a.as_of, leagues)
     write_csv(result.matches, a.out_csv)
+    info = {"as_of": a.as_of.isoformat(), "source_commit": source.get("commit"),
+            "leagues": source.get("leagues"), "clean_matches": len(result.matches)}
+    (a.out_csv.parent / "build_info.json").write_text(json.dumps(info, indent=2) + "\n")
     a.report.parent.mkdir(parents=True, exist_ok=True)
     a.report.write_text(render(result, as_of=a.as_of, source=source), encoding="utf-8")
     print(f"{len(result.matches)} clean matches -> {a.out_csv}\nreport -> {a.report}")

@@ -40,3 +40,5 @@ def test_build_writes_csv_with_empty_missing_cells(write_raw, tmp_path):
     assert rows[0]["home_team"] == "Stoke City FC"
     assert rows[0]["ft_home"] == "2" and rows[0]["ht_home"] == ""
     assert "Unknown team names (not in mapping): **0**" in rep.read_text()
+    info = json.loads((out.parent / "build_info.json").read_text())
+    assert info["as_of"] == "2021-01-01" and info["clean_matches"] == 1

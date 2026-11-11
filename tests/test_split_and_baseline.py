@@ -98,7 +98,23 @@ def test_run_end_to_end(tmp_path):
         w.writerows(rows)
     ev = run.evaluate(rows, half_lives=(180,), priors=(5,), elo_grid=[(20, 75, 100, 0.2)])
     assert all(len(f) == 4 for f in ev["forecasts"].values())
-    assert set(ev["forecasts"]) >= {"poisson", "dixon_coles", "poisson_no_decay", "elo"}
+    assert set(ev["forecasts"]) >= {"poisson", "dixon_coles", "poisson_no_decay", "elo",
+                                    "poisson_calibrated", "dixon_coles_calibrated",
+                                    "elo_calibrated"}
+    # Calibration fitted only on the validation season (a train season), before the test.
+    test_start = min(m.date for m in ev["split"].test)
+    for c in ev["calibration"].values():
+        assert c["seasons"] == ["2021-22"] and c["last_date"] < test_start
+        assert c["calibrator"].n_fit == 4
+
+    from openbetlab.evaluation.comparison import render_comparison
+    comp = render_comparison(ev, {"as_of": "2026-11-11", "source_commit": "abc",
+                                  "leagues": ["en.1"]})
+    assert "No betting edge is claimed" in comp
+    assert "python -m openbetlab.data.build --as-of 2026-11-11" in comp
+    assert "python -m openbetlab.evaluation.run --holdout-season 2022-23" in comp
+    for name in ev["forecasts"]:
+        assert f"| `{name}` |" in comp and f"### `{name}`" in comp
     text = run.render(ev)
     assert "season 2022-23" in text and "seasons 2020-21 to 2021-22" in text
     assert "tuned on 2021-22" in text
